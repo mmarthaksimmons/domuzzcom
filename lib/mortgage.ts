@@ -54,6 +54,7 @@ export interface MortgageEstimate {
     pmi: number;
   };
   annualTax: number;
+  annualInsurance: number;
   totalMonthlyCost: number;
   cashNeeded: {
     downPayment: number;
@@ -183,6 +184,7 @@ export function calculateMortgage(
       pmi: Math.round(pmi),
     },
     annualTax: Math.round(annualTax),
+    annualInsurance: Math.round(monthlyInsurance * 12),
     totalMonthlyCost: Math.round(totalMonthlyCost),
     cashNeeded: {
       downPayment: Math.round(downPayment),

@@ -105,6 +105,13 @@ function buildCriteria(userProfile?: UserProfile | null): ScoredCriterion[] {
       higherBetter: false,
     },
     {
+      key: "annualInsurance",
+      label: "Annual Insurance",
+      extract: ({ mort }) => mort?.annualInsurance ?? null,
+      defaultMax: 5_000,
+      higherBetter: false,
+    },
+    {
       key: "dtiRatio",
       label: "DTI Ratio",
       extract: ({ mort }) =>
@@ -273,6 +280,12 @@ function buildSections(): SectionDef[] {
         {
           label: "Est. Annual Tax",
           extract: ({ mort }) => mort?.annualTax ?? null,
+          format: "currency",
+          higherBetter: false,
+        },
+        {
+          label: "Est. Annual Insurance",
+          extract: ({ mort }) => mort?.annualInsurance ?? null,
           format: "currency",
           higherBetter: false,
         },
