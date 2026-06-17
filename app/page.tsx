@@ -21,6 +21,7 @@ const DEFAULT_WEIGHTS: Weights = {
   price: 5,
   schools: 4,
   size: 3,
+  lotSize: 2,
   taxes: 3,
 };
 
@@ -28,6 +29,7 @@ const CRITERIA = [
   { key: "price", label: "💰 Price", desc: "Lower is better", default: 5 },
   { key: "schools", label: "🏫 Schools", desc: "School quality", default: 4 },
   { key: "size", label: "📐 Size", desc: "Square footage", default: 3 },
+  { key: "lotSize", label: "🏡 Lot Size", desc: "Land area", default: 2 },
   { key: "taxes", label: "🏛️ Taxes", desc: "Property tax rate", default: 3 },
 ] as const;
 
@@ -179,7 +181,7 @@ export default function Home() {
             🏠 House Compare Made Easy
           </h1>
           <p className="text-muted-foreground">
-            Compare up to 3 properties side-by-side with AI-powered insights
+            Compare up to 3 properties side-by-side and export to CSV
           </p>
         </div>
 
@@ -412,7 +414,7 @@ export default function Home() {
                 </CollapsibleContent>
               </Collapsible>
 
-              <div className="flex justify-end pt-4">
+              <div className="flex justify-end">
                 <Button onClick={() => setStep(1)} size="lg">
                   Next →
                 </Button>
