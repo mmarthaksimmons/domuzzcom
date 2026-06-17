@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import ProgressPanel from "@/components/ProgressPanel";
 
 const DEFAULT_WEIGHTS: Weights = {
   price: 5,
@@ -45,13 +46,38 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [noGoFilters, setNoGoFilters] = useState<NoGoFilters>(DEFAULT_NO_GO);
   const [dealbreakersOpen, setDealbreakersOpen] = useState(false);
+  const [showProgress, setShowProgress] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const dispatchProgress = (stage: string, message: string, progress: number) => {
+    window.dispatchEvent(
+      new CustomEvent("compare-progress", {
+        detail: { stage, message, progress },
+      })
+    );
+  };
+
+  const dispatchDone = () => {
+    window.dispatchEvent(new CustomEvent("compare-done"));
+  };
+
+  const handleCancel = useCallback(() => {
+    abortRef.current?.abort();
+    setShowProgress(false);
+    setLoading(false);
+    setError("Comparison cancelled");
+  }, []);
 
   const handleCompare = async () => {
     setLoading(true);
     setError(null);
+    setShowProgress(true);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const res = await fetch("/api/compare", {
+      const res = await fetch("/api/compare/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -60,23 +86,72 @@ export default function Home() {
           userProfile: userProfile.income > 0 ? userProfile : null,
           noGoFilters,
         }),
+        signal: controller.signal,
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.error ?? "Failed to compare properties");
+        const errData = await res.json().catch(() => ({ error: "Failed to compare properties" }));
+        throw new Error(errData.error ?? "Failed to compare properties");
       }
 
-      sessionStorage.setItem("compareResult", JSON.stringify(data));
-      sessionStorage.setItem("compareWeights", JSON.stringify(weights));
-      sessionStorage.setItem("compareNoGoFilters", JSON.stringify(noGoFilters));
-      if (userProfile.income > 0) {
-        sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
+      const reader = res.body?.getReader();
+      if (!reader) {
+        throw new Error("No response stream available");
       }
-      router.push("/compare");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalResult: Record<string, unknown> | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        let eventType = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            const dataStr = line.slice(6);
+            try {
+              const data = JSON.parse(dataStr);
+
+              if (eventType === "progress") {
+                dispatchProgress(data.stage, data.message, data.progress);
+              } else if (eventType === "done") {
+                finalResult = data;
+                const { skippedStages, ...result } = data;
+                dispatchDone();
+
+                sessionStorage.setItem("compareResult", JSON.stringify(result));
+                sessionStorage.setItem("compareWeights", JSON.stringify(weights));
+                sessionStorage.setItem("compareNoGoFilters", JSON.stringify(noGoFilters));
+                if (userProfile.income > 0) {
+                  sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
+                }
+              } else if (eventType === "error") {
+                throw new Error(data.message ?? "An unexpected error occurred");
+              }
+            } catch (parseErr: any) {
+              if (parseErr?.message && !parseErr.message.includes("JSON")) {
+                throw parseErr;
+              }
+            }
+          }
+        }
+      }
+
+      if (finalResult) {
+        router.push("/compare");
+      }
     } catch (err: any) {
+      if (err.name === "AbortError") return;
       setError(err.message);
+      setShowProgress(false);
     } finally {
       setLoading(false);
     }
@@ -139,8 +214,13 @@ export default function Home() {
           ))}
         </div>
 
+        {/* Progress Panel (shown during comparison) */}
+        {showProgress && (
+          <ProgressPanel onCancel={handleCancel} />
+        )}
+
         {/* Slide 1: Priorities & Dealbreakers */}
-        {step === 0 && (
+        {!showProgress && step === 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Step 1: Set Your Priorities</CardTitle>
@@ -342,7 +422,7 @@ export default function Home() {
         )}
 
         {/* Slide 2: Financial Profile */}
-        {step === 1 && (
+        {!showProgress && step === 1 && (
           <Card>
             <CardHeader>
               <CardTitle>Step 2: Your Financial Profile</CardTitle>
@@ -492,7 +572,7 @@ export default function Home() {
         )}
 
         {/* Slide 3: Property Addresses */}
-        {step === 2 && (
+        {!showProgress && step === 2 && (
           <Card>
             <CardHeader>
               <CardTitle>Step 3: Enter Property Addresses</CardTitle>
