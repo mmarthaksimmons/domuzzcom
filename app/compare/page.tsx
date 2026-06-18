@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import CompareTable from "@/components/CompareTable";
 import AiSummary from "@/components/AiSummary";
+import BigTicketPanel from "@/components/BigTicketPanel";
 import { House, Weights, CompareResponse, UserProfile } from "@/lib/types";
-import { calculateMortgage } from "@/lib/mortgage";
+import { calculateMortgage, normalizeTaxRate } from "@/lib/mortgage";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Download } from "lucide-react";
@@ -104,86 +105,524 @@ export default function ComparePage() {
               variant="outline"
               size="sm"
               onClick={() => {
-                const headers = [
-                  "Address",
-                  "Home Type",
-                  "Status",
-                  "Price",
-                  "Est. Monthly Payment",
-                  "Est. Annual Tax",
-                  "Est. Annual Insurance",
-                  "Interest Rate",
-                  "DTI Ratio",
-                  "Down Payment",
-                  "Cash Needed",
-                  "Beds",
-                  "Baths",
-                  "Sqft",
-                  "Price/Sqft",
-                  "Lot Size",
-                  "Stories",
-                  "Year Built",
-                  "Garage",
-                  "Pool",
-                  "Fireplace",
-                  "Heating",
-                  "Cooling",
-                  "HOA (Monthly)",
-                  "Tax Rate",
-                  "Days on Zillow",
-                  "Nearby Schools",
-                  "AI Score",
-                  "AI Pros",
-                  "AI Cons",
-                  "AI Affordability",
-                  "AI Red Flags",
-                  "AI First-Year Cost",
+                // ── Helpers matching CompareTable formatting ──
+                const fmtCur = (v: number | null) =>
+                  v != null ? `$${v.toLocaleString()}` : "—";
+                const fmtPct = (v: number | null) =>
+                  v != null ? `${(v * 100).toFixed(2)}%` : "—";
+                const fmtBool = (v: boolean | null) =>
+                  v === null ? "—" : v ? "Yes" : "No";
+                const fmtSchools = (
+                  schools: { name: string; rating: number | null }[]
+                ) =>
+                  schools.length === 0
+                    ? "—"
+                    : schools
+                        .map(
+                          (s) =>
+                            `${s.name} (${s.rating != null ? s.rating + "/10" : "NR"})`
+                        )
+                        .join("\n");
+
+                // ── Weighted scores (matching CompareTable logic) ──
+                const buildCriteria = () => [
+                  {
+                    key: "price",
+                    extract: (h: House) => h.price,
+                    defaultMax: 1_500_000,
+                    higherBetter: false,
+                  },
+                  {
+                    key: "monthlyPayment",
+                    extract: (_h: House, m: ReturnType<typeof calculateMortgage> | null) =>
+                      m?.monthlyPayment ?? null,
+                    defaultMax: 10_000,
+                    higherBetter: false,
+                  },
+                  {
+                    key: "annualTax",
+                    extract: (_h: House, m: ReturnType<typeof calculateMortgage> | null) =>
+                      m?.annualTax ?? null,
+                    defaultMax: 20_000,
+                    higherBetter: false,
+                  },
+                  {
+                    key: "annualInsurance",
+                    extract: (_h: House, m: ReturnType<typeof calculateMortgage> | null) =>
+                      m?.annualInsurance ?? null,
+                    defaultMax: 5_000,
+                    higherBetter: false,
+                  },
+                  {
+                    key: "dtiRatio",
+                    extract: (_h: House, m: ReturnType<typeof calculateMortgage> | null) =>
+                      m?.dtiRatio != null ? m.dtiRatio * 100 : null,
+                    defaultMax: 50,
+                    higherBetter: false,
+                  },
+                  {
+                    key: "downPayment",
+                    extract: (_h: House, m: ReturnType<typeof calculateMortgage> | null) =>
+                      m?.cashNeeded.downPayment ?? null,
+                    defaultMax: 400_000,
+                    higherBetter: false,
+                  },
+                  {
+                    key: "schools",
+                    extract: (h: House) => {
+                      const ratings = h.schools
+                        .map((s) => s.rating)
+                        .filter((r) => r != null) as number[];
+                      return ratings.length > 0 ? Math.max(...ratings) : 0;
+                    },
+                    defaultMax: 10,
+                    higherBetter: true,
+                  },
+                  {
+                    key: "size",
+                    extract: (h: House) => h.sqft,
+                    defaultMax: 5_000,
+                    higherBetter: true,
+                  },
+                  {
+                    key: "taxes",
+                    extract: (h: House) => normalizeTaxRate(h.propertyTaxRate),
+                    defaultMax: 0.03,
+                    higherBetter: false,
+                  },
+                  {
+                    key: "yearBuilt",
+                    extract: (h: House) => h.yearBuilt,
+                    defaultMax: new Date().getFullYear(),
+                    higherBetter: true,
+                  },
+                  {
+                    key: "lotSize",
+                    extract: (h: House) => {
+                      if (!h.lotSize) return null;
+                      const acresMatch = h.lotSize.match(/([\d.]+)\s*acres?/i);
+                      if (acresMatch)
+                        return parseFloat(acresMatch[1]) * 43560;
+                      const sqftMatch = h.lotSize.match(/([\d,]+)\s*sq\s*ft/i);
+                      if (sqftMatch)
+                        return parseFloat(sqftMatch[1].replace(/,/g, ""));
+                      return null;
+                    },
+                    defaultMax: 43_560,
+                    higherBetter: true,
+                  },
+                  {
+                    key: "hoa",
+                    extract: (h: House) => h.hoaMonthly,
+                    defaultMax: 500,
+                    higherBetter: false,
+                  },
+                  {
+                    key: "pricePerSqft",
+                    extract: (h: House) => h.pricePerSqft,
+                    defaultMax: 500,
+                    higherBetter: false,
+                  },
+                  {
+                    key: "daysOnZillow",
+                    extract: (h: House) => h.daysOnZillow,
+                    defaultMax: 365,
+                    higherBetter: false,
+                  },
+                  {
+                    key: "beds",
+                    extract: (h: House) => h.beds,
+                    defaultMax: 6,
+                    higherBetter: true,
+                  },
+                  {
+                    key: "baths",
+                    extract: (h: House) => h.baths,
+                    defaultMax: 5,
+                    higherBetter: true,
+                  },
+                  {
+                    key: "garage",
+                    extract: (h: House) => h.garage,
+                    defaultMax: 4,
+                    higherBetter: true,
+                  },
+                  {
+                    key: "stories",
+                    extract: (h: House) => h.stories,
+                    defaultMax: 3,
+                    higherBetter: true,
+                  },
+                  {
+                    key: "bigTicketRisk",
+                    extract: (h: House) => h.systemAges?.totalEstimatedBigRepairs ?? null,
+                    defaultMax: 30000,
+                    higherBetter: false,
+                  },
                 ];
-                const rows = data.houses.map((h, i) => {
-                  const m = mortgages[i];
-                  const aiHouse = data.aiResult?.perHouse?.find(
-                    (p) => p.address === h.address
-                  );
-                  return [
-                    `"${h.address}"`,
-                    h.homeType ?? "",
-                    h.status ?? "",
-                    h.price ?? "",
-                    m?.monthlyPayment ?? "",
-                    m?.annualTax ?? "",
-                    m?.annualInsurance ?? "",
-                    m ? `${m.interestRate.toFixed(2)}%` : "",
-                    m?.dtiRatio != null ? `${(m.dtiRatio * 100).toFixed(1)}%` : "",
-                    m?.cashNeeded.downPayment ?? "",
-                    m?.cashNeeded.total ?? "",
-                    h.beds ?? "",
-                    h.baths ?? "",
-                    h.sqft ?? "",
-                    h.pricePerSqft ?? "",
-                    `"${h.lotSize ?? ""}"`,
-                    h.stories ?? "",
-                    h.yearBuilt ?? "",
-                    h.garage ?? "",
-                    h.hasPool != null ? (h.hasPool ? "Yes" : "No") : "",
-                    h.hasFireplace != null ? (h.hasFireplace ? "Yes" : "No") : "",
-                    `"${h.heating ?? ""}"`,
-                    `"${h.cooling ?? ""}"`,
-                    h.hoaMonthly ?? "",
-                    h.propertyTaxRate ?? "",
-                    h.daysOnZillow ?? "",
-                    `"${h.schools.map((s) => `${s.name} (${s.rating ?? "NR"})`).join("; ")}"`,
-                    aiHouse?.score?.toFixed(1) ?? "",
-                    `"${(aiHouse?.pros ?? []).join("; ")}"`,
-                    `"${(aiHouse?.cons ?? []).join("; ")}"`,
-                    `"${aiHouse?.affordabilityRating ?? ""}"`,
-                    `"${(aiHouse?.redFlags ?? []).join("; ")}"`,
-                    aiHouse?.firstYearCostEstimate ?? "",
-                  ];
+
+                const criteria = buildCriteria();
+                const scores = data.houses.map((h, i) => {
+                  let totalW = 0;
+                  let totalS = 0;
+                  for (const c of criteria) {
+                    const w = weights[c.key] ?? 3;
+                    if (w <= 0) continue;
+                    const val = c.extract(h, mortgages[i]);
+                    if (val == null || isNaN(val)) continue;
+                    let norm = Math.min(val / c.defaultMax, 1);
+                    if (!c.higherBetter) norm = 1 - norm;
+                    norm = Math.max(norm, 0);
+                    totalS += norm * w;
+                    totalW += w;
+                  }
+                  return totalW > 0 ? (totalS / totalW) * 10 : 0;
                 });
-                const csv = [
-                  headers.join(","),
-                  ...rows.map((r) => r.join(",")),
-                ].join("\n");
+                const bestScore = Math.max(...scores);
+                const worstScore =
+                  scores.length > 1 ? Math.min(...scores) : bestScore;
+
+                const houseAddrs = data.houses.map((h) => `"${h.address}"`);
+
+                // ── Build transposed CSV rows (fields as rows, houses as columns) ──
+                const csvRows: string[] = [];
+
+                // Header row: Field, House1, House2, ...
+                csvRows.push(["Field", ...houseAddrs].join(","));
+
+                // Section helper
+                const pushSection = (label: string) => {
+                  csvRows.push(
+                    [`"${label}"`, ...houseAddrs.map(() => "")].join(",")
+                  );
+                };
+
+                // Photo row
+                csvRows.push(
+                  [
+                    "Photo",
+                    ...data.houses.map((h) => `"${h.photo ?? "—"}"`),
+                  ].join(",")
+                );
+
+                // ── Overview ──
+                pushSection("--- Overview ---");
+                csvRows.push(
+                  [
+                    "Home Type",
+                    ...data.houses.map((h) => h.homeType ?? "—"),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Status",
+                    ...data.houses.map((h) => h.status ?? "—"),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Price",
+                    ...data.houses.map((h) => fmtCur(h.price)),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Est. Monthly Payment",
+                    ...data.houses.map((_, i) =>
+                      fmtCur(mortgages[i]?.monthlyPayment ?? null)
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Est. Annual Tax",
+                    ...data.houses.map((_, i) =>
+                      fmtCur(mortgages[i]?.annualTax ?? null)
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Est. Annual Insurance",
+                    ...data.houses.map((_, i) =>
+                      fmtCur(mortgages[i]?.annualInsurance ?? null)
+                    ),
+                  ].join(",")
+                );
+
+                // ── Affordability ──
+                pushSection("--- Affordability ---");
+                csvRows.push(
+                  [
+                    "Interest Rate",
+                    ...data.houses.map((_, i) =>
+                      mortgages[i]
+                        ? `${mortgages[i].interestRate.toFixed(2)}%`
+                        : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "DTI Ratio",
+                    ...data.houses.map((_, i) => {
+                      const d = mortgages[i]?.dtiRatio;
+                      return d != null ? `${(d * 100).toFixed(2)}%` : "—";
+                    }),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Down Payment",
+                    ...data.houses.map((_, i) =>
+                      fmtCur(mortgages[i]?.cashNeeded.downPayment ?? null)
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Cash Needed (incl. closing)",
+                    ...data.houses.map((_, i) =>
+                      fmtCur(mortgages[i]?.cashNeeded.total ?? null)
+                    ),
+                  ].join(",")
+                );
+
+                // ── Size & Layout ──
+                pushSection("--- Size & Layout ---");
+                csvRows.push(
+                  [
+                    "Beds",
+                    ...data.houses.map((h) => h.beds ?? "—"),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Baths",
+                    ...data.houses.map((h) => h.baths ?? "—"),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Sqft",
+                    ...data.houses.map((h) =>
+                      h.sqft != null ? String(h.sqft) : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Price/sqft",
+                    ...data.houses.map((h) =>
+                      h.pricePerSqft != null
+                        ? `$${h.pricePerSqft.toLocaleString()}`
+                        : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Lot Size",
+                    ...data.houses.map((h) =>
+                      h.lotSize ? `"${h.lotSize}"` : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Stories",
+                    ...data.houses.map((h) => h.stories ?? "—"),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Year Built",
+                    ...data.houses.map((h) => h.yearBuilt ?? "—"),
+                  ].join(",")
+                );
+
+                // ── Features ──
+                pushSection("--- Features ---");
+                csvRows.push(
+                  [
+                    "Garage",
+                    ...data.houses.map((h) => h.garage ?? "—"),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Pool",
+                    ...data.houses.map((h) => fmtBool(h.hasPool)),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Fireplace",
+                    ...data.houses.map((h) => fmtBool(h.hasFireplace)),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Heating",
+                    ...data.houses.map((h) =>
+                      h.heating ? `"${h.heating}"` : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Cooling",
+                    ...data.houses.map((h) =>
+                      h.cooling ? `"${h.cooling}"` : "—"
+                    ),
+                  ].join(",")
+                );
+
+                // ── Costs ──
+                pushSection("--- Costs ---");
+                csvRows.push(
+                  [
+                    "HOA (Monthly)",
+                    ...data.houses.map((h) => fmtCur(h.hoaMonthly)),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Tax Rate",
+                    ...data.houses.map((h) =>
+                      fmtPct(normalizeTaxRate(h.propertyTaxRate))
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Days on Zillow",
+                    ...data.houses.map((h) => h.daysOnZillow ?? "—"),
+                  ].join(",")
+                );
+
+                // ── Schools ──
+                pushSection("--- Schools ---");
+                csvRows.push(
+                  [
+                    "Nearby Schools",
+                    ...data.houses.map((h) =>
+                      `"${fmtSchools(h.schools)}"`
+                    ),
+                  ].join(",")
+                );
+
+                // ── Weighted Score ──
+                csvRows.push(
+                  [
+                    "Weighted Score",
+                    ...scores.map((s) => `${s.toFixed(1)} / 10`),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Score Breakdown",
+                    ...scores.map((s, i) =>
+                      s === bestScore
+                        ? "🏆 Best"
+                        : `${(
+                            ((s - bestScore) / bestScore) *
+                            100
+                          ).toFixed(0)}% below best`
+                    ),
+                  ].join(",")
+                );
+
+                // ── First-Year Cost ──
+                if (mortgages.some((m) => m.firstYearCost)) {
+                  csvRows.push(
+                    [
+                      "Est. First-Year Cost",
+                      ...mortgages.map((m) =>
+                        m.firstYearCost?.totalFirstYear
+                          ? `$${m.firstYearCost.totalFirstYear.toLocaleString()}`
+                          : "—"
+                      ),
+                    ].join(",")
+                  );
+                }
+
+                // ── Major Systems ──
+                pushSection("--- Major Systems ---");
+                csvRows.push(
+                  [
+                    "Big-Ticket Risk",
+                    ...data.houses.map((h) => h.systemAges?.bigTicketRisk ?? "—"),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Est. 5yr Big Repairs",
+                    ...data.houses.map((h) =>
+                      h.systemAges?.totalEstimatedBigRepairs
+                        ? `$${h.systemAges.totalEstimatedBigRepairs.toLocaleString()}`
+                        : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Roof Condition",
+                    ...data.houses.map((h) => h.systemAges?.roofCondition ?? "—"),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Roof Repl. Cost",
+                    ...data.houses.map((h) =>
+                      h.systemAges?.roofReplacementEstimate
+                        ? `$${h.systemAges.roofReplacementEstimate.toLocaleString()}`
+                        : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "HVAC Condition",
+                    ...data.houses.map((h) => h.systemAges?.hvacCondition ?? "—"),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "HVAC Repl. Cost",
+                    ...data.houses.map((h) =>
+                      h.systemAges?.hvacReplacementEstimate
+                        ? `$${h.systemAges.hvacReplacementEstimate.toLocaleString()}`
+                        : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Water Heater Condition",
+                    ...data.houses.map((h) => h.systemAges?.waterHeaterCondition ?? "—"),
+                  ].join(",")
+                );
+
+                // ── Dealbreakers ──
+                if (
+                  noGoViolations &&
+                  Object.keys(noGoViolations).length > 0
+                ) {
+                  csvRows.push(
+                    [
+                      "Dealbreakers (🚫)",
+                      ...data.houses.map((h) => {
+                        const v = noGoViolations[h.address];
+                        return v && v.length > 0
+                          ? `"${v.join("; ")}"`
+                          : "—";
+                      }),
+                    ].join(",")
+                  );
+                }
+
+                const csv = csvRows.join("\n");
                 const blob = new Blob([csv], { type: "text/csv" });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
@@ -204,6 +643,11 @@ export default function ComparePage() {
             noGoViolations={noGoViolations}
           />
         </Card>
+
+        {/* Big-Ticket System Estimates */}
+        <div className="mb-6">
+          <BigTicketPanel houses={data.houses} />
+        </div>
 
         {/* AI Summary */}
         <AiSummary result={data.aiResult} />

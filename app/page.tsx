@@ -31,6 +31,7 @@ const CRITERIA = [
   { key: "size", label: "📐 Size", desc: "Square footage", default: 3 },
   { key: "lotSize", label: "🏡 Lot Size", desc: "Land area", default: 2 },
   { key: "taxes", label: "🏛️ Taxes", desc: "Property tax rate", default: 3 },
+  { key: "bigTicketRisk", label: "🔧 Big Repairs", desc: "Estimated upcoming roof/HVAC costs", default: 4 },
 ] as const;
 
 const STEPS = ["Priorities", "Financial Profile", "Property Addresses"];

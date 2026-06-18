@@ -217,6 +217,13 @@ function buildCriteria(userProfile?: UserProfile | null): ScoredCriterion[] {
       defaultMax: 3,
       higherBetter: true,
     },
+    {
+      key: "bigTicketRisk",
+      label: "Big-Ticket Needs",
+      extract: ({ house }) => house.systemAges?.totalEstimatedBigRepairs ?? null,
+      defaultMax: 30000,
+      higherBetter: false,
+    },
   ];
 }
 
@@ -359,6 +366,73 @@ function buildSections(): SectionDef[] {
           higherBetter: false,
         },
         { label: "Days on Zillow", fieldKey: "daysOnZillow", higherBetter: false },
+      ],
+    },
+    {
+      label: "Major Systems",
+      rows: [
+        {
+          label: "Roof Condition",
+          extract: ({ house }) => house.systemAges?.roofCondition ?? null,
+          format: "string",
+        },
+        {
+          label: "Roof Remaining Life",
+          extract: ({ house }) => house.systemAges?.roofRemainingLife ?? null,
+          format: "number",
+          higherBetter: true,
+        },
+        {
+          label: "Roof Repl. Cost",
+          extract: ({ house }) => house.systemAges?.roofReplacementEstimate ?? null,
+          format: "currency",
+          higherBetter: false,
+        },
+        {
+          label: "HVAC Condition",
+          extract: ({ house }) => house.systemAges?.hvacCondition ?? null,
+          format: "string",
+        },
+        {
+          label: "HVAC Remaining Life",
+          extract: ({ house }) => house.systemAges?.hvacRemainingLife ?? null,
+          format: "number",
+          higherBetter: true,
+        },
+        {
+          label: "HVAC Repl. Cost",
+          extract: ({ house }) => house.systemAges?.hvacReplacementEstimate ?? null,
+          format: "currency",
+          higherBetter: false,
+        },
+        {
+          label: "Water Heater Condition",
+          extract: ({ house }) => house.systemAges?.waterHeaterCondition ?? null,
+          format: "string",
+        },
+        {
+          label: "WH Remaining Life",
+          extract: ({ house }) => house.systemAges?.waterHeaterRemainingLife ?? null,
+          format: "number",
+          higherBetter: true,
+        },
+        {
+          label: "WH Repl. Cost",
+          extract: ({ house }) => house.systemAges?.waterHeaterReplacementEstimate ?? null,
+          format: "currency",
+          higherBetter: false,
+        },
+        {
+          label: "Big-Ticket Risk",
+          extract: ({ house }) => house.systemAges?.bigTicketRisk ?? null,
+          format: "string",
+        },
+        {
+          label: "Est. 5yr Repairs",
+          extract: ({ house }) => house.systemAges?.totalEstimatedBigRepairs ?? null,
+          format: "currency",
+          higherBetter: false,
+        },
       ],
     },
     {

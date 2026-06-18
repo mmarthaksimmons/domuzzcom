@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { scrapeByAddresses } from "@/lib/apify";
 import { normalize } from "@/lib/normalize";
 import { compareHouses } from "@/lib/ai";
+import { estimateSystemAges } from "@/lib/systems";
 
 export const maxDuration = 300;
 export const runtime = "nodejs";
@@ -60,6 +61,13 @@ export async function POST(req: NextRequest) {
           if (aborted) return;
 
           const houses = raw.map(normalize);
+
+          // Attach system age estimates (roof, HVAC, water heater)
+          const currentYear = new Date().getFullYear();
+          for (const house of houses) {
+            house.systemAges = estimateSystemAges(house, currentYear);
+          }
+
           if (aborted) return;
           emit(controller, "progress", { stage: "normalizing", message: `Processed ${houses.length} propert${houses.length > 1 ? "ies" : "y"}`, progress: 35 });
 

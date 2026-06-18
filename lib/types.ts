@@ -1,3 +1,34 @@
+export interface SystemAgeEstimate {
+  /** Estimated age of roof in years (null if unknown) */
+  roofAge: number | null;
+  /** Estimated remaining life for roof (years, negative = past end-of-life) */
+  roofRemainingLife: number | null;
+  /** Estimated replacement cost for roof */
+  roofReplacementEstimate: number | null;
+  /** Roof condition: "good" | "fair" | "near-end" | "past-end" */
+  roofCondition: string | null;
+
+  /** Estimated age of HVAC system */
+  hvacAge: number | null;
+  /** Estimated remaining life for HVAC */
+  hvacRemainingLife: number | null;
+  /** Estimated replacement cost for HVAC */
+  hvacReplacementEstimate: number | null;
+  /** HVAC condition */
+  hvacCondition: string | null;
+
+  /** Estimated age of water heater */
+  waterHeaterAge: number | null;
+  waterHeaterRemainingLife: number | null;
+  waterHeaterReplacementEstimate: number | null;
+  waterHeaterCondition: string | null;
+
+  /** Sum of all big-ticket replacements likely needed in next 5 years */
+  totalEstimatedBigRepairs: number;
+  /** Risk level: "low" | "moderate" | "high" | "critical" */
+  bigTicketRisk: string;
+}
+
 export interface House {
   address: string;
   price: number | null;
@@ -25,6 +56,8 @@ export interface House {
   listingUrl: string;
   lat: number | null;
   lng: number | null;
+  /** Age-based big-ticket system estimates (roof, HVAC, water heater) */
+  systemAges?: SystemAgeEstimate;
 }
 
 export type Weights = Record<string, number>; // e.g. { price: 5, schools: 4, size: 3, taxes: 3 }

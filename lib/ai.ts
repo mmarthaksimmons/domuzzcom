@@ -35,8 +35,19 @@ For each property, scan the listing data and flag ANY of these warning signs as 
 - Price reduced multiple times (desperation or hidden problems)
 - Mention of structural or major repairs needed
 
-IMPORTANT — Construction Quality:
-Note the year built and assess likely maintenance needs. Homes built before 1978 may have lead paint; before 1960 may have outdated electrical; before 1990 may have original HVAC/roof approaching end of life. Factor these into your analysis.
+IMPORTANT — Construction Quality & System Ages:
+Note the year built and assess likely maintenance needs. Homes built before 1978 may have lead paint; before 1960 may have outdated electrical; before 1990 may have original HVAC/roof approaching end of life.
+
+IMPORTANT — Major System Replacement Estimates:
+Each property has a "systemAges" object with age-based estimates for roof, HVAC, and water heater. This data is conservative (assumes original systems unless proven otherwise). Use these estimates to:
+1. Flag any system with "past-end" or "near-end" condition as a HIGH-PRIORITY red flag
+2. Include estimated replacement costs in the firstYearCostEstimate calculation (add the totalEstimatedBigRepairs if within 5-year window)
+3. Factor the bigTicketRisk level into the score — houses with "critical" or "high" risk should score lower on financial/condition grounds
+4. Mention specific system concerns in the "cons" for each affected property
+
+System Age Estimates Legend:
+- Condition: "good" (>10yr remaining), "fair" (5-10yr), "near-end" (0-5yr), "past-end" (overdue)
+- Risk: "low" (<$3k upcoming repairs), "moderate" ($3k-$8k), "high" ($8k-$15k), "critical" (>$15k)
 
 IMPORTANT — Resale Value Factors:
 Consider long-term resale value when scoring:
