@@ -111,7 +111,7 @@ Return JSON: { summary, perHouse:[{address,pros,cons,score,monthlyEstimate,affor
 
   // Try to parse as-is first (response_format: json_object should give clean JSON)
   try {
-    return JSON.parse(content);
+    return sanitizeAiResult(JSON.parse(content));
   } catch {
     // Fall through to extraction
   }
@@ -121,7 +121,7 @@ Return JSON: { summary, perHouse:[{address,pros,cons,score,monthlyEstimate,affor
 
   // Try parsing after stripping fences
   try {
-    return JSON.parse(content);
+    return sanitizeAiResult(JSON.parse(content));
   } catch {
     // Fall through to balanced-brace extraction
   }
@@ -153,12 +153,44 @@ Return JSON: { summary, perHouse:[{address,pros,cons,score,monthlyEstimate,affor
 
   // Try to parse the extracted JSON
   try {
-    return JSON.parse(extracted);
+    return sanitizeAiResult(JSON.parse(extracted));
   } catch (parseErr: any) {
     // Attempt to repair common AI JSON issues before giving up
     const repaired = repairJson(extracted);
-    return JSON.parse(repaired);
+    return sanitizeAiResult(JSON.parse(repaired));
   }
+}
+
+/**
+ * Coerce AI result fields that should be strings but may arrive as objects.
+ */
+function sanitizeAiResult(result: Record<string, unknown>): Record<string, unknown> {
+  const stringFields = ["summary", "recommendation", "financialSummary"] as const;
+  const out = { ...result };
+
+  for (const field of stringFields) {
+    const val = out[field];
+    if (val != null && typeof val === "object") {
+      out[field] = JSON.stringify(val, null, 2);
+    }
+  }
+
+  // Also sanitize perHouse entries
+  if (Array.isArray(out.perHouse)) {
+    out.perHouse = out.perHouse.map((p: Record<string, unknown>) => {
+      const sanitized = { ...p };
+      // coerce any string fields that might be objects inside perHouse items
+      for (const field of ["affordabilityRating"]) {
+        const v = sanitized[field];
+        if (v != null && typeof v === "object") {
+          sanitized[field] = JSON.stringify(v, null, 2);
+        }
+      }
+      return sanitized;
+    });
+  }
+
+  return out;
 }
 
 /**

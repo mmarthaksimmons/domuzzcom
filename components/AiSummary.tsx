@@ -94,7 +94,9 @@ export default function AiSummary({ result }: Props) {
                 <ThumbsUp className="h-3.5 w-3.5" />
                 Executive Summary
               </h4>
-              <p className="text-sm leading-relaxed text-muted-foreground">{result.summary}</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {typeof result.summary === "string" ? result.summary : JSON.stringify(result.summary)}
+              </p>
             </div>
 
             {/* Per-house detailed cards */}
@@ -202,7 +204,9 @@ export default function AiSummary({ result }: Props) {
                   Financial Health Assessment
                 </h4>
                 <p className="text-sm leading-relaxed text-blue-700 dark:text-blue-300">
-                  {result.financialSummary}
+                  {typeof result.financialSummary === "string"
+                    ? result.financialSummary
+                    : JSON.stringify(result.financialSummary)}
                 </p>
               </div>
             )}
@@ -215,7 +219,11 @@ export default function AiSummary({ result }: Props) {
                 <ThumbsUp className="h-3.5 w-3.5" />
                 Our Recommendation
               </h4>
-              <p className="text-sm leading-relaxed">{result.recommendation}</p>
+              <p className="text-sm leading-relaxed">
+                {typeof result.recommendation === "string"
+                  ? result.recommendation
+                  : JSON.stringify(result.recommendation)}
+              </p>
             </div>
           </CardContent>
         </CollapsibleContent>

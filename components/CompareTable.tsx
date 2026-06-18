@@ -40,6 +40,28 @@ function formatBool(val: boolean | null): string {
   return val ? "Yes" : "No";
 }
 
+function formatCondition(condition: string | null | undefined): string {
+  if (!condition) return "—";
+  switch (condition) {
+    case "good": return "Good";
+    case "fair": return "Fair";
+    case "near-end": return "Near End";
+    case "past-end": return "Past End";
+    default: return condition;
+  }
+}
+
+function formatRisk(risk: string | null | undefined): string {
+  if (!risk) return "—";
+  switch (risk) {
+    case "low": return "Low";
+    case "moderate": return "Moderate";
+    case "high": return "High";
+    case "critical": return "Critical";
+    default: return risk;
+  }
+}
+
 function formatSchools(schools: { name: string; rating: number | null }[]): string {
   if (!schools || schools.length === 0) return "—";
   return schools
@@ -261,7 +283,7 @@ interface TableRowDef {
   label: string;
   fieldKey?: keyof House;
   extract?: (ctx: { house: House; mort: MortgageEstimate | null }) => string | number | null;
-  format?: "currency" | "percent" | "number" | "bool" | "string";
+  format?: "currency" | "percent" | "number" | "bool" | "string" | "condition" | "risk";
   higherBetter?: boolean;
 }
 
@@ -374,7 +396,7 @@ function buildSections(): SectionDef[] {
         {
           label: "Roof Condition",
           extract: ({ house }) => house.systemAges?.roofCondition ?? null,
-          format: "string",
+          format: "condition",
         },
         {
           label: "Roof Remaining Life",
@@ -391,7 +413,7 @@ function buildSections(): SectionDef[] {
         {
           label: "HVAC Condition",
           extract: ({ house }) => house.systemAges?.hvacCondition ?? null,
-          format: "string",
+          format: "condition",
         },
         {
           label: "HVAC Remaining Life",
@@ -408,7 +430,7 @@ function buildSections(): SectionDef[] {
         {
           label: "Water Heater Condition",
           extract: ({ house }) => house.systemAges?.waterHeaterCondition ?? null,
-          format: "string",
+          format: "condition",
         },
         {
           label: "WH Remaining Life",
@@ -425,7 +447,7 @@ function buildSections(): SectionDef[] {
         {
           label: "Big-Ticket Risk",
           extract: ({ house }) => house.systemAges?.bigTicketRisk ?? null,
-          format: "string",
+          format: "risk",
         },
         {
           label: "Est. 5yr Repairs",
@@ -483,58 +505,108 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
   );
 
   return (
-    <div className="space-y-6">
-      <Table>
-        <TableHeader>
-          <TableRow>
-              <TableHead className="w-[140px] min-w-[120px]">Field</TableHead>
-              {houses.map((h, i) => (
-                <TableHead key={i} className="text-center min-w-[160px]">
-                  <div className="text-sm font-semibold text-foreground line-clamp-2">
-                    {h.address}
-                  </div>
-                  {noGoViolations?.[h.address] && noGoViolations[h.address].length > 0 && (
-                    <div className="mt-1 flex items-center justify-center gap-1">
-                      <XCircle className="h-3 w-3 text-destructive" />
-                      <span className="text-[10px] text-destructive font-medium">Eliminated</span>
+    <div className="w-full overflow-x-auto pb-4">
+      <div className="min-w-fit divide-y divide-border border-b">
+        {/* Header Cards Row */}
+        <div className="flex px-4 py-8 gap-4">
+          <div className="w-[180px] shrink-0" /> {/* Label column spacer */}
+          {houses.map((h, i) => {
+            const m = mortgages[i];
+            const isBestValue = scores[i] === bestScore;
+            
+            // Extract a short name for display. 
+            // In a real app we might pass a title, here we just use the start of the address
+            const shortName = h.address.split(",")[0] || "Property";
+            
+            return (
+              <div key={i} className="w-[280px] shrink-0 flex flex-col gap-3">
+                {/* Header info */}
+                <div className="flex flex-col gap-1.5 h-14">
+                  <h3 className="font-bold text-lg leading-tight line-clamp-1">
+                    {shortName}
+                  </h3>
+                  {isBestValue ? (
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-pink-500 bg-pink-50/50 dark:bg-pink-950/20 px-2 py-0.5 rounded w-fit">
+                      Best Value
+                    </span>
+                  ) : scores[i] === worstScore && houses.length > 1 ? (
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-green-500 bg-green-50/50 dark:bg-green-950/20 px-2 py-0.5 rounded w-fit">
+                      Cheapest
+                    </span>
+                  ) : (
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-amber-500 bg-amber-50/50 dark:bg-amber-950/20 px-2 py-0.5 rounded w-fit">
+                      Featured
+                    </span>
+                  )}
+                </div>
+
+                {/* Photo */}
+                <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-muted">
+                  {h.photo ? (
+                    <img
+                      src={h.photo}
+                      alt={h.address}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
+                      No Photo
                     </div>
                   )}
-                </TableHead>
-              ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {/* Photo Row */}
-          <TableRow>
-            <TableCell className="font-medium text-xs py-2">Photo</TableCell>
-            {houses.map((h, i) => (
-              <TableCell key={i} className="text-center py-2">
-                {h.photo ? (
-                  <img
-                    src={h.photo}
-                    alt={h.address}
-                    className="w-24 h-18 object-cover rounded-md mx-auto"
-                    loading="lazy"
-                  />
-                ) : (
-                  <span className="text-xs text-muted-foreground">—</span>
-                )}
-              </TableCell>
-            ))}
-          </TableRow>
+                  {noGoViolations?.[h.address] && noGoViolations[h.address].length > 0 && (
+                    <div className="absolute top-2 left-2 bg-destructive/90 text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded-sm font-medium flex items-center gap-1 backdrop-blur-sm">
+                      <XCircle className="w-3 h-3" />
+                      Eliminated
+                    </div>
+                  )}
+                  {/* Heart icon placeholder */}
+                  <button className="absolute top-2 right-2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition-colors backdrop-blur-sm">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12.62 20.81C12.28 20.93 11.72 20.93 11.38 20.81C8.48 19.82 2 15.69 2 8.68998C2 5.59998 4.49 3.09998 7.56 3.09998C9.38 3.09998 10.99 3.97998 12 5.33998C13.01 3.97998 14.63 3.09998 16.44 3.09998C19.51 3.09998 22 5.59998 22 8.68998C22 15.69 15.52 19.82 12.62 20.81Z" fill="white"/>
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Price and Action */}
+                <div className="flex items-center justify-between mt-2">
+                  <div className="font-bold text-lg">
+                    {formatCurrency(h.price)}
+                    <span className="text-sm font-normal text-muted-foreground"> price</span>
+                  </div>
+                  <button className="text-sm px-4 py-1.5 rounded-full border border-border font-medium hover:bg-muted transition-colors text-primary">
+                    View
+                  </button>
+                </div>
+
+
+                {/* Score */}
+                <div className="mt-4 pt-4 border-t flex justify-between items-center bg-muted/30 -mx-3 px-3 py-2 rounded-lg">
+                  <span className="text-sm font-medium">Match Score</span>
+                  <span className={`font-bold ${isBestValue ? "text-green-600" : ""}`}>
+                    {scores[i].toFixed(1)} <span className="text-muted-foreground font-normal text-sm">/ 10</span>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Comparison Rows */}
+        <div className="flex flex-col gap-0 pb-8 mt-2">
           {flatRows.reduce<React.ReactElement[]>((acc, row, idx) => {
             // Section header when section changes
             const prevSection = idx > 0 ? flatRows[idx - 1].sectionLabel : null;
             if (row.sectionLabel !== prevSection) {
               acc.push(
-                <TableRow key={`sec-${row.sectionLabel}`} className="bg-muted/30">
-                  <TableCell
-                    colSpan={houses.length + 1}
-                    className="py-2 font-semibold text-xs uppercase tracking-wider text-muted-foreground"
-                  >
+                <div key={`sec-${row.sectionLabel}`} className="flex px-4 py-4 border-t border-border/60">
+                  <div className="w-[180px] shrink-0 flex items-center font-bold text-lg">
                     {row.sectionLabel}
-                  </TableCell>
-                </TableRow>
+                  </div>
+                  {houses.map((_, i) => (
+                    <div key={i} className="w-[280px] shrink-0 ml-4" />
+                  ))}
+                </div>
               );
             }
 
@@ -545,7 +617,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                 return v as string | number | null;
               });
 
-            const isNumeric = row.format !== "string" && row.format !== "bool";
+            const isNumeric = row.format !== "string" && row.format !== "bool" && row.format !== "condition" && row.format !== "risk";
             const best = isNumeric
               ? bestValue(
                   houses,
@@ -558,8 +630,11 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
               : null;
 
             acc.push(
-              <TableRow key={idx}>
-                <TableCell className="font-medium text-xs py-2">{row.label}</TableCell>
+              <div key={idx} className="flex px-4 py-4 hover:bg-muted/30 transition-colors">
+                <div className="w-[180px] shrink-0 text-sm font-semibold flex items-center text-foreground flex-row gap-3">
+                  <div className="w-1 h-3 bg-muted rounded-full" />
+                  {row.label}
+                </div>
                 {houses.map((h, i) => {
                   const raw = extractor({ house: h, mort: mortgages[i] });
                   const numVal = typeof raw === "number" ? raw : null;
@@ -574,102 +649,98 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                     formatted = formatPercent(raw);
                   } else if (row.format === "bool") {
                     formatted = formatBool(typeof raw === "boolean" ? raw : null);
+                  } else if (row.format === "condition") {
+                    formatted = formatCondition(typeof raw === "string" ? raw : null);
+                  } else if (row.format === "risk") {
+                    formatted = formatRisk(typeof raw === "string" ? raw : null);
                   } else {
                     formatted = String(raw);
                   }
 
+                  const conditionColor =
+                    row.format === "condition" && raw === "good"
+                      ? "text-green-600 font-semibold"
+                      : row.format === "condition"
+                        ? "text-red-600 font-semibold"
+                        : row.format === "risk"
+                          ? raw === "low"
+                            ? "text-green-600 font-semibold"
+                            : raw === "moderate"
+                              ? "text-yellow-600 font-semibold"
+                              : raw === "high"
+                                ? "text-orange-600 font-semibold"
+                                : "text-red-600 font-semibold"
+                          : "";
+
                   return (
-                    <TableCell
+                    <div
                       key={i}
-                      className={`text-center text-xs py-2 whitespace-pre-line ${
+                      className={`w-[280px] shrink-0 ml-4 text-sm flex items-center whitespace-pre-line text-foreground/80 ${
                         isNumeric && bestV ? "text-green-600 font-semibold" : ""
-                      }`}
+                      } ${conditionColor}`}
                     >
-                      {formatted}
-                    </TableCell>
+                      {/* Optional visualization hook for beds/baths/etc based on row.fieldKey */}
+                      {row.fieldKey === "beds" && (
+                        <div className="flex items-center gap-3">
+                           {/* Tiny inline photo thumbnail for visual flavor as in dribbble */}
+                           <div className="w-10 h-7 bg-muted rounded overflow-hidden shadow-sm shrink-0">
+                             {h.photo && <img src={h.photo} className="w-full h-full object-cover" />}
+                           </div>
+                           <div className="flex flex-col gap-0.5">
+                             <span>{formatted} {formatted !== "—" && "bedrooms"}</span>
+                             <span className="text-muted-foreground text-xs">{h.baths || 0} baths</span>
+                           </div>
+                        </div>
+                      )}
+                      {row.fieldKey !== "beds" && formatted}
+                    </div>
                   );
                 })}
-              </TableRow>
+              </div>
             );
 
             return acc;
           }, [])}
-
-          {/* Summary rows */}
-          <TableRow className="bg-muted/20 border-t-2">
-            <TableCell className="font-semibold text-sm">Weighted Score</TableCell>
-            {houses.map((h, i) => (
-              <TableCell
-                key={i}
-                className={`text-center font-bold text-sm ${
-                  scores[i] === bestScore
-                    ? "text-green-600"
-                    : scores[i] === worstScore && houses.length > 1
-                      ? "text-red-500"
-                      : ""
-                }`}
-              >
-                {scores[i].toFixed(1)} / 10
-              </TableCell>
-            ))}
-          </TableRow>
-          <TableRow className="bg-muted/10">
-            <TableCell className="font-medium text-xs">Score Breakdown</TableCell>
-            {houses.map((h, i) => {
-              const delta = bestScore > 0 ? ((scores[i] - bestScore) / bestScore) * 100 : 0;
-              return (
-                <TableCell key={i} className="text-center text-xs text-muted-foreground">
-                  {scores[i] === bestScore ? "🏆 Best" : `${delta.toFixed(0)}% below best`}
-                </TableCell>
-              );
-            })}
-          </TableRow>
-
+          
           {/* First-Year Cost Row */}
           {mortgages.some((m) => m.firstYearCost) && (
-            <TableRow className="bg-yellow-50/30 dark:bg-yellow-950/10">
-              <TableCell className="font-medium text-xs flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3 text-yellow-600" />
+            <div className="flex px-4 py-4 bg-yellow-50/50 dark:bg-yellow-950/10">
+              <div className="w-[180px] shrink-0 text-sm font-semibold flex items-center gap-2 text-yellow-700 dark:text-yellow-500">
+                <AlertTriangle className="h-4 w-4" />
                 Est. First-Year Cost
-              </TableCell>
+              </div>
               {mortgages.map((m, i) => (
-                <TableCell
-                  key={i}
-                  className={`text-center text-xs font-mono ${
-                    m.firstYearCost?.totalFirstYear
-                      ? "text-yellow-700 dark:text-yellow-400 font-semibold"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  {m.firstYearCost?.totalFirstYear
-                    ? `$${m.firstYearCost.totalFirstYear.toLocaleString()}`
-                    : "—"}
-                </TableCell>
+                <div key={i} className="w-[280px] shrink-0 ml-4 text-sm flex items-center font-mono">
+                  {m.firstYearCost?.totalFirstYear ? (
+                    <span className="text-yellow-700 dark:text-yellow-400 font-semibold">
+                      ${m.firstYearCost.totalFirstYear.toLocaleString()}
+                    </span>
+                  ) : "—"}
+                </div>
               ))}
-            </TableRow>
+            </div>
           )}
 
           {/* No-Go Violations Rows */}
-          {noGoViolations &&
-            Object.keys(noGoViolations).length > 0 &&
-            houses.map((h) => {
-              const violations = noGoViolations[h.address];
-              if (!violations || violations.length === 0) return null;
-              return (
-                <TableRow key={`nogo-${h.address}`} className="bg-destructive/5">
-                  <TableCell className="text-[10px] text-destructive font-medium">
-                    🚫 Dealbreakers
-                  </TableCell>
-                  {houses.map((_, i) => (
-                    <TableCell key={i} className="text-center text-[10px] text-destructive">
-                      {houses[i].address === h.address ? violations.join("; ") : "—"}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              );
-            })}
-        </TableBody>
-      </Table>
+          {noGoViolations && Object.keys(noGoViolations).length > 0 && houses.map((h) => {
+            const violations = noGoViolations[h.address];
+            if (!violations || violations.length === 0) return null;
+            
+            return (
+              <div key={`nogo-${h.address}`} className="flex px-4 py-4 bg-destructive/5">
+                <div className="w-[180px] shrink-0 text-sm font-semibold flex items-center text-destructive">
+                  🚫 Dealbreakers
+                </div>
+                {houses.map((_, i) => (
+                  <div key={i} className="w-[280px] shrink-0 ml-4 text-sm flex items-center text-destructive font-medium">
+                    {houses[i].address === h.address ? violations.join("; ") : "—"}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
