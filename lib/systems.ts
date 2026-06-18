@@ -65,9 +65,11 @@ function findListingRenewalHints(_house: House): {
  * Estimate the age and remaining life of major systems (roof, HVAC, water heater)
  * based on the house's year built and square footage.
  *
- * Uses conservative worst-case assumptions:
- * - Assumes systems are original from year-built unless there's listing evidence otherwise
- * - This protects the buyer: if a system was already replaced, they're pleasantly surprised
+ * Uses cyclical replacement assumptions:
+ * - Systems are assumed to be replaced on a cycle matching their typical lifespan
+ * - Age is calculated as (house age) % (system lifespan), giving a realistic estimate
+ * - Example: a 31-year-old house → roof ~31 % 25 = 6 years old
+ * - This prevents absurd negative remaining-life values for older homes
  */
 export function estimateSystemAges(
   house: House,
@@ -80,15 +82,18 @@ export function estimateSystemAges(
 
   const roofLifespan = getRoofLifespan(house);
 
-  // Roof
-  const roofAge = age;
+  // Roof — assume replaced on a cycle (every roofLifespan years)
+  // If house is 31 years old with asphalt shingle, roof is ~31 % 25 = 6 years old
+  const roofAge =
+    age != null ? age % roofLifespan : null;
   const roofRemainingLife =
     roofAge != null ? roofLifespan - roofAge : null;
   const roofReplacementEstimate = Math.round(sqft * ROOF_COST_PER_SQFT);
   const roofCondition = classifyCondition(roofRemainingLife, roofLifespan);
 
-  // HVAC
-  const hvacAge = age;
+  // HVAC — assume replaced on a cycle (every HVAC_LIFESPAN years)
+  const hvacAge =
+    age != null ? age % HVAC_LIFESPAN : null;
   const hvacRemainingLife =
     hvacAge != null ? HVAC_LIFESPAN - hvacAge : null;
   const hvacReplacementEstimate = HVAC_REPLACEMENT_COST;
