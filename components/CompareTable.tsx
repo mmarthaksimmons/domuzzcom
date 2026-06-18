@@ -62,6 +62,14 @@ function formatRisk(risk: string | null | undefined): string {
   }
 }
 
+function formatLabel(val: string | null | undefined): string {
+  if (!val) return "—";
+  return val
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function formatSchools(schools: { name: string; rating: number | null }[]): string {
   if (!schools || schools.length === 0) return "—";
   return schools
@@ -297,8 +305,16 @@ function buildSections(): SectionDef[] {
     {
       label: "Overview",
       rows: [
-        { label: "Home Type", fieldKey: "homeType", format: "string" },
-        { label: "Status", fieldKey: "status", format: "string" },
+        {
+          label: "Home Type",
+          extract: ({ house }) => formatLabel(house.homeType),
+          format: "string",
+        },
+        {
+          label: "Status",
+          extract: ({ house }) => formatLabel(house.status),
+          format: "string",
+        },
         { label: "Price", fieldKey: "price", format: "currency", higherBetter: false },
         {
           label: "Est. Monthly Payment",
