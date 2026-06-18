@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import Image from "next/image";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -178,9 +179,16 @@ export default function Home() {
       <div className="max-w-2xl mx-auto px-4 py-12">
         {/* Header */}
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            🏠 House Compare Made Easy
-          </h1>
+          <div className="flex justify-center mb-2">
+            <Image
+              src="/domuzz_logo.png"
+              alt="Domuzz - House Compare Made Easy"
+              width={260}
+              height={60}
+              priority
+              className="h-auto w-auto"
+            />
+          </div>
           <p className="text-muted-foreground">
             Compare up to 3 properties side-by-side and export to CSV
           </p>

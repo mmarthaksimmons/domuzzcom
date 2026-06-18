@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import CompareTable from "@/components/CompareTable";
 import AiSummary from "@/components/AiSummary";
@@ -81,9 +82,16 @@ export default function ComparePage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-foreground">
-            Property Comparison
-          </h1>
+          <div className="flex items-center">
+            <Image
+              src="/domuzz_logo.png"
+              alt="Domuzz - Property Comparison"
+              width={260}
+              height={60}
+              priority
+              className="h-auto w-auto"
+            />
+          </div>
           <Button
             variant="link"
             onClick={() => {
