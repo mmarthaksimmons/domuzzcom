@@ -583,6 +583,16 @@ export default function ComparePage() {
                 );
                 csvRows.push(
                   [
+                    "Roof Remaining Life",
+                    ...data.houses.map((h) => {
+                      const r = h.systemAges?.roofRemainingLife;
+                      if (r == null) return "—";
+                      return r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`;
+                    }),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
                     "HVAC Condition",
                     ...data.houses.map((h) => h.systemAges?.hvacCondition ?? "—"),
                   ].join(",")
@@ -599,8 +609,38 @@ export default function ComparePage() {
                 );
                 csvRows.push(
                   [
+                    "HVAC Remaining Life",
+                    ...data.houses.map((h) => {
+                      const r = h.systemAges?.hvacRemainingLife;
+                      if (r == null) return "—";
+                      return r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`;
+                    }),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
                     "Water Heater Condition",
                     ...data.houses.map((h) => h.systemAges?.waterHeaterCondition ?? "—"),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "WH Repl. Cost",
+                    ...data.houses.map((h) =>
+                      h.systemAges?.waterHeaterReplacementEstimate
+                        ? `$${h.systemAges.waterHeaterReplacementEstimate.toLocaleString()}`
+                        : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "WH Remaining Life",
+                    ...data.houses.map((h) => {
+                      const r = h.systemAges?.waterHeaterRemainingLife;
+                      if (r == null) return "—";
+                      return r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`;
+                    }),
                   ].join(",")
                 );
 

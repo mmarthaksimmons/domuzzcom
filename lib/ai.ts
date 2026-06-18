@@ -162,6 +162,46 @@ Return JSON: { summary, perHouse:[{address,pros,cons,score,monthlyEstimate,affor
 }
 
 /**
+ * Convert an object value into a human-readable string, since the AI sometimes
+ * returns structured JSON objects for fields that should be plain-text prose.
+ */
+function stringifyObjectField(val: unknown): string {
+  if (typeof val === "string") return val;
+  if (val == null || typeof val !== "object") return JSON.stringify(val);
+
+  const obj = val as Record<string, unknown>;
+
+  // For financialSummary: { grossMonthlyIncome, targetMaxPayment, advice }
+  if ("advice" in obj && typeof obj.advice === "string") {
+    const income = typeof obj.grossMonthlyIncome === "number"
+      ? `$${obj.grossMonthlyIncome.toLocaleString()}/mo`
+      : null;
+    const maxPayment = typeof obj.targetMaxPayment === "number"
+      ? `$${obj.targetMaxPayment.toLocaleString()}/mo`
+      : null;
+
+    const prefixParts = [];
+    if (income) prefixParts.push(`Gross income: ${income}`);
+    if (maxPayment) prefixParts.push(`Max target payment: ${maxPayment}`);
+
+    if (prefixParts.length > 0) {
+      return `${prefixParts.join(" | ")} — ${obj.advice}`;
+    }
+    return obj.advice;
+  }
+
+  // For summary/recommendation: try "text", "content", or "summary" keys first
+  for (const key of ["text", "content", "summary", "description", "analysis"]) {
+    if (key in obj && typeof obj[key] === "string" && obj[key].length > 20) {
+      return obj[key] as string;
+    }
+  }
+
+  // Last resort: stringify compactly
+  return JSON.stringify(obj);
+}
+
+/**
  * Coerce AI result fields that should be strings but may arrive as objects.
  */
 function sanitizeAiResult(result: Record<string, unknown>): Record<string, unknown> {
@@ -171,7 +211,7 @@ function sanitizeAiResult(result: Record<string, unknown>): Record<string, unkno
   for (const field of stringFields) {
     const val = out[field];
     if (val != null && typeof val === "object") {
-      out[field] = JSON.stringify(val, null, 2);
+      out[field] = stringifyObjectField(val);
     }
   }
 
@@ -183,7 +223,7 @@ function sanitizeAiResult(result: Record<string, unknown>): Record<string, unkno
       for (const field of ["affordabilityRating"]) {
         const v = sanitized[field];
         if (v != null && typeof v === "object") {
-          sanitized[field] = JSON.stringify(v, null, 2);
+          sanitized[field] = stringifyObjectField(v);
         }
       }
       return sanitized;
