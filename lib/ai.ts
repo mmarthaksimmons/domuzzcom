@@ -171,34 +171,58 @@ function stringifyObjectField(val: unknown): string {
 
   const obj = val as Record<string, unknown>;
 
-  // For financialSummary: { grossMonthlyIncome, targetMaxPayment, advice }
-  if ("advice" in obj && typeof obj.advice === "string") {
-    const income = typeof obj.grossMonthlyIncome === "number"
-      ? `$${obj.grossMonthlyIncome.toLocaleString()}/mo`
-      : null;
-    const maxPayment = typeof obj.targetMaxPayment === "number"
-      ? `$${obj.targetMaxPayment.toLocaleString()}/mo`
-      : null;
+  // Collect all prose-worthy parts from the object into a readable text
+  const parts: string[] = [];
 
-    const prefixParts = [];
-    if (income) prefixParts.push(`Gross income: ${income}`);
-    if (maxPayment) prefixParts.push(`Max target payment: ${maxPayment}`);
-
-    if (prefixParts.length > 0) {
-      return `${prefixParts.join(" | ")} — ${obj.advice}`;
-    }
-    return obj.advice;
-  }
-
-  // For summary/recommendation: try "text", "content", or "summary" keys first
-  for (const key of ["text", "content", "summary", "description", "analysis"]) {
-    if (key in obj && typeof obj[key] === "string" && obj[key].length > 20) {
-      return obj[key] as string;
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === "string" && value.length > 0) {
+      // For long strings, just use them directly as prose paragraphs
+      if (value.length > 40) {
+        parts.push(value);
+      } else {
+        // Short strings get labeled
+        parts.push(`${key}: ${value}`);
+      }
+    } else if (typeof value === "number") {
+      parts.push(`${formatKey(key)}: ${formatValue(key, value)}`);
+    } else if (typeof value === "object" && value != null && !Array.isArray(value)) {
+      // Recurse into nested objects
+      const nested = stringifyObjectField(value);
+      if (nested && nested !== "{}") {
+        parts.push(nested);
+      }
     }
   }
 
-  // Last resort: stringify compactly
+  // If we found prose parts, join them naturally
+  if (parts.length > 0) {
+    return parts.join(". ");
+  }
+
+  // Last resort: compact stringify
   return JSON.stringify(obj);
+}
+
+/** Convert camelCase keys to human-readable labels */
+function formatKey(key: string): string {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, s => s.toUpperCase())
+    .trim();
+}
+
+/** Format numeric values with appropriate units based on key name */
+function formatValue(key: string, value: number): string {
+  const lower = key.toLowerCase();
+  if (lower.includes("income") || lower.includes("monthly") || lower.includes("payment") ||
+      lower.includes("cost") || lower.includes("price") || lower.includes("repair") ||
+      lower.includes("budget") || lower.includes("down")) {
+    return `$${value.toLocaleString()}`;
+  }
+  if (lower.includes("percent") || lower.includes("rate") && value < 100) {
+    return `${value}%`;
+  }
+  return String(value);
 }
 
 /**

@@ -86,8 +86,8 @@ export default function ComparePage() {
             <Image
               src="/domuzz_logo.png"
               alt="Domuzz - Property Comparison"
-              width={260}
-              height={60}
+              width={200}
+              height={46}
               priority
               className="h-auto w-auto"
             />

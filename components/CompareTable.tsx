@@ -506,7 +506,10 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
   );
 
   const bestScore = Math.max(...scores);
-  const worstScore = scores.length > 1 ? Math.min(...scores) : bestScore;
+  const cheapestPrice = useMemo(
+    () => Math.min(...houses.map((h) => h.price).filter((p): p is number => p != null)),
+    [houses]
+  );
 
   // Flatten sections into rows with section context
   const flatRows = useMemo(
@@ -527,9 +530,9 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
         <div className="flex px-4 py-8 gap-4">
           <div className="w-[180px] shrink-0" /> {/* Label column spacer */}
           {houses.map((h, i) => {
-            const m = mortgages[i];
             const isBestValue = scores[i] === bestScore;
-            
+            const isCheapest = h.price === cheapestPrice;
+
             // Extract a short name for display. 
             // In a real app we might pass a title, here we just use the start of the address
             const shortName = h.address.split(",")[0] || "Property";
@@ -545,7 +548,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                     <span className="text-[10px] uppercase font-bold tracking-wider text-pink-500 bg-pink-50/50 dark:bg-pink-950/20 px-2 py-0.5 rounded w-fit">
                       Best Value
                     </span>
-                  ) : scores[i] === worstScore && houses.length > 1 ? (
+                  ) : isCheapest && houses.length > 1 ? (
                     <span className="text-[10px] uppercase font-bold tracking-wider text-green-500 bg-green-50/50 dark:bg-green-950/20 px-2 py-0.5 rounded w-fit">
                       Cheapest
                     </span>
