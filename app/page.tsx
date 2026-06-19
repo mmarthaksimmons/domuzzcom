@@ -423,8 +423,8 @@ export default function Home() {
                 </CollapsibleContent>
               </Collapsible>
 
-              <div className="flex justify-end">
-                <Button onClick={() => setStep(1)} size="lg" className="w-full sm:w-auto">
+              <div className="flex">
+                <Button onClick={() => setStep(1)} className="w-full sm:w-auto">
                   Next →
                 </Button>
               </div>
@@ -572,8 +572,8 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex justify-between pt-4 gap-3">
-                <Button variant="outline" onClick={() => setStep(0)}>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-between pt-4 gap-3">
+                <Button variant="outline" onClick={() => setStep(0)} className="w-full sm:w-auto">
                   ← Back
                 </Button>
                 <Button onClick={() => setStep(2)} className="w-full sm:w-auto">Next →</Button>
@@ -620,9 +620,9 @@ export default function Home() {
                 </div>
               ))}
 
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between pt-4 gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-between pt-4 gap-3">
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setStep(1)}>
+                  <Button variant="outline" onClick={() => setStep(1)} className="w-full sm:w-auto">
                     ← Back
                   </Button>
                   {addresses.length < 3 && (
@@ -631,6 +631,7 @@ export default function Home() {
                       size="sm"
                       onClick={() => setAddresses((prev) => [...prev, ""])}
                       disabled={loading}
+                      className="w-full sm:w-auto"
                     >
                       + Add Address
                     </Button>

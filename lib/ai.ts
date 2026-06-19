@@ -100,14 +100,19 @@ Return JSON: { summary, perHouse:[{address,pros,cons,score,monthlyEstimate,affor
         },
       ],
       response_format: { type: "json_object" },
+      max_tokens: 16384,
     }),
   });
   const data = await res.json();
 
   let content = data.choices[0].message.content;
 
-  // Log the raw response for debugging
-  console.log("AI raw response:", content.slice(0, 500));
+  // Log the raw response for debugging (more context for truncation issues)
+  console.log("AI raw response (first 500 chars):", content.slice(0, 500));
+  console.log("AI raw response length:", content.length);
+  if (data.choices[0]?.finish_reason) {
+    console.log("AI finish reason:", data.choices[0].finish_reason);
+  }
 
   // Try to parse as-is first (response_format: json_object should give clean JSON)
   try {
@@ -156,7 +161,10 @@ Return JSON: { summary, perHouse:[{address,pros,cons,score,monthlyEstimate,affor
     return sanitizeAiResult(JSON.parse(extracted));
   } catch (parseErr: any) {
     // Attempt to repair common AI JSON issues before giving up
+    console.error("JSON parse error:", parseErr.message);
+    console.error("Failing JSON (last 300 chars):", extracted.slice(-300));
     const repaired = repairJson(extracted);
+    console.log("Repaired JSON (last 300 chars):", repaired.slice(-300));
     return sanitizeAiResult(JSON.parse(repaired));
   }
 }
@@ -263,6 +271,7 @@ function sanitizeAiResult(result: Record<string, unknown>): Record<string, unkno
  * - Consecutive commas
  * - Missing commas between properties
  * - Truncated output with "..."
+ * - Unterminated string values (close them before closing brackets)
  */
 function repairJson(json: string): string {
   let repaired = json
@@ -277,10 +286,49 @@ function repairJson(json: string): string {
     .replace(/(?<!\\)\n/g, "\\n");
 
   // If the JSON ends abruptly (missing closing brackets), close them
-  let openBraces = 0;
-  let openBrackets = 0;
+  // First, detect unterminated string (odd number of quotes before the end)
   let inString = false;
   let escaped = false;
+  let lastStringQuotePos = -1;
+
+  for (let i = 0; i < repaired.length; i++) {
+    const ch = repaired[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === "\\") { escaped = true; continue; }
+    if (ch === '"') {
+      inString = !inString;
+      if (!inString) lastStringQuotePos = i; // closed a string
+    }
+  }
+
+  // If we're still inside a string at EOF, close it
+  let needsStringClosure = inString;
+  if (needsStringClosure) {
+    // Find the last comma before the unterminated string to remove any trailing partial content
+    const lastComma = repaired.lastIndexOf(",");
+    const lastBracket = Math.max(
+      repaired.lastIndexOf("}"),
+      repaired.lastIndexOf("]")
+    );
+    const lastColon = repaired.lastIndexOf(":");
+    // The unterminated string started after the last structural character
+    const clipPos = Math.max(lastComma, lastBracket, lastColon);
+    if (clipPos > lastStringQuotePos) {
+      // Remove the partial/incomplete value and replace it with an empty string
+      repaired = repaired.slice(0, clipPos + 1) + '""';
+      needsStringClosure = false; // we patched it
+    } else {
+      // No safe clipping point — just close the string with an empty value
+      repaired += '": ""';
+      needsStringClosure = false;
+    }
+  }
+
+  // Now count bracket depth
+  let openBraces = 0;
+  let openBrackets = 0;
+  inString = false;
+  escaped = false;
 
   for (const ch of repaired) {
     if (escaped) { escaped = false; continue; }
