@@ -168,7 +168,7 @@ export default function Home() {
       case 1:
         return true; // financial profile is optional
       case 2:
-        return addresses.some((a) => a.trim());
+        return addresses.filter((a) => a.trim()).length >= 2;
       default:
         return false;
     }
@@ -588,7 +588,7 @@ export default function Home() {
             <CardHeader>
               <CardTitle>Step 3: Enter Property Addresses</CardTitle>
               <CardDescription>
-                Enter up to 3 US property addresses to compare
+                Enter 2–3 US property addresses to compare
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -639,7 +639,7 @@ export default function Home() {
                 </div>
                 <Button
                   onClick={handleCompare}
-                  disabled={loading || !addresses.some((a) => a.trim())}
+                  disabled={loading || addresses.filter((a) => a.trim()).length < 2}
                   className="w-full sm:w-auto"
                 >
                   {loading ? "Comparing..." : "Compare Properties"}

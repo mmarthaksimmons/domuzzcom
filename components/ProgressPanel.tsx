@@ -123,6 +123,9 @@ export default function ProgressPanel({ onCancel }: Props) {
           <div>
             <h3 className="font-semibold text-base sm:text-lg text-foreground">Comparing Properties</h3>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{message}</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 font-medium">
+              ⏱️ This comparison may take up to 2 minutes to complete. Please do not close this page.
+            </p>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-4 w-4" />

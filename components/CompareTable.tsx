@@ -523,6 +523,14 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
     [sections]
   );
 
+  // Dynamic column width based on number of houses (fills available space)
+  const colWidthClass =
+    houses.length === 1
+      ? "w-full sm:flex-1 sm:min-w-0"
+      : houses.length === 2
+        ? "w-[260px] sm:flex-1 sm:min-w-0"
+        : "w-[260px] sm:w-[280px] shrink-0";
+
   return (
     <div className="w-full overflow-x-auto pb-4">
       {/* Mobile scroll hint */}
@@ -542,7 +550,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
             const shortName = h.address.split(",")[0] || "Property";
             
             return (
-              <div key={i} className="w-[260px] sm:w-[280px] shrink-0 flex flex-col gap-3">
+              <div key={i} className={`${colWidthClass} flex flex-col gap-3`}>
                 {/* Header info */}
                 <div className="flex flex-col gap-1.5 h-14">
                   <h3 className="font-bold text-lg leading-tight line-clamp-1">
@@ -627,7 +635,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                     {row.sectionLabel}
                   </div>
                   {houses.map((_, i) => (
-                    <div key={i} className="w-[260px] sm:w-[280px] shrink-0 ml-4" />
+                    <div key={i} className={`${colWidthClass} ml-4`} />
                   ))}
                 </div>
               );
@@ -698,7 +706,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                   return (
                     <div
                       key={i}
-                      className={`w-[260px] sm:w-[280px] shrink-0 ml-4 text-xs sm:text-sm flex items-center whitespace-pre-line text-foreground/80 ${
+                      className={`${colWidthClass} ml-4 text-xs sm:text-sm flex items-center whitespace-pre-line text-foreground/80 ${
                         isNumeric && bestV ? "text-green-600 font-semibold" : ""
                       } ${conditionColor}`}
                     >
@@ -733,7 +741,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                 Est. First-Year Cost
               </div>
               {mortgages.map((m, i) => (
-                <div key={i} className="w-[260px] sm:w-[280px] shrink-0 ml-4 text-xs sm:text-sm flex items-center font-mono">
+                <div key={i} className={`${colWidthClass} ml-4 text-xs sm:text-sm flex items-center font-mono`}>
                   {m.firstYearCost?.totalFirstYear ? (
                     <span className="text-yellow-700 dark:text-yellow-400 font-semibold">
                       ${m.firstYearCost.totalFirstYear.toLocaleString()}
@@ -755,7 +763,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                   🚫 Dealbreakers
                 </div>
                 {houses.map((_, i) => (
-                  <div key={i} className="w-[260px] sm:w-[280px] shrink-0 ml-4 text-xs sm:text-sm flex items-center text-destructive font-medium">
+                  <div key={i} className={`${colWidthClass} ml-4 text-xs sm:text-sm flex items-center text-destructive font-medium`}>
                     {houses[i].address === h.address ? violations.join("; ") : "—"}
                   </div>
                 ))}
