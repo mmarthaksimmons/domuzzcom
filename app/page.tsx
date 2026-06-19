@@ -176,30 +176,30 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-background">
-      <div className="max-w-2xl mx-auto px-4 py-12">
+      <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12">
         {/* Header */}
-        <div className="text-center mb-10">
+        <div className="text-center mb-8 sm:mb-10">
           <div className="flex justify-center mb-2">
             <Image
               src="/domuzz_logo.png"
               alt="Domuzz - House Compare Made Easy"
-              width={260}
-              height={60}
+              width={180}
+              height={41}
               priority
-              className="h-auto w-auto"
+              className="h-auto w-auto sm:w-[260px]"
             />
           </div>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-sm sm:text-base">
             Compare up to 3 properties side-by-side and export to CSV
           </p>
         </div>
 
         {/* Step Indicator */}
-        <div className="flex items-center justify-center gap-2 mb-8">
+        <div className="flex items-center justify-center gap-1 sm:gap-2 mb-8">
           {STEPS.map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
+            <div key={s} className="flex items-center gap-1 sm:gap-2">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-medium ${
                   i <= step
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground"
@@ -208,7 +208,7 @@ export default function Home() {
                 {i + 1}
               </div>
               <span
-                className={`text-sm ${
+                className={`text-xs sm:text-sm ${
                   i === step ? "font-semibold text-foreground" : "text-muted-foreground"
                 }`}
               >
@@ -216,7 +216,7 @@ export default function Home() {
               </span>
               {i < STEPS.length - 1 && (
                 <div
-                  className={`w-8 h-0.5 ${
+                  className={`w-4 sm:w-8 h-0.5 ${
                     i < step ? "bg-primary" : "bg-muted"
                   }`}
                 />
@@ -424,7 +424,7 @@ export default function Home() {
               </Collapsible>
 
               <div className="flex justify-end">
-                <Button onClick={() => setStep(1)} size="lg">
+                <Button onClick={() => setStep(1)} size="lg" className="w-full sm:w-auto">
                   Next →
                 </Button>
               </div>
@@ -572,11 +572,11 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex justify-between pt-4">
+              <div className="flex justify-between pt-4 gap-3">
                 <Button variant="outline" onClick={() => setStep(0)}>
                   ← Back
                 </Button>
-                <Button onClick={() => setStep(2)}>Next →</Button>
+                <Button onClick={() => setStep(2)} className="w-full sm:w-auto">Next →</Button>
               </div>
             </CardContent>
           </Card>
@@ -620,7 +620,7 @@ export default function Home() {
                 </div>
               ))}
 
-              <div className="flex items-center justify-between pt-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between pt-4 gap-3">
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setStep(1)}>
                     ← Back
@@ -639,6 +639,7 @@ export default function Home() {
                 <Button
                   onClick={handleCompare}
                   disabled={loading || !addresses.some((a) => a.trim())}
+                  className="w-full sm:w-auto"
                 >
                   {loading ? "Comparing..." : "Compare Properties"}
                 </Button>
@@ -650,12 +651,12 @@ export default function Home() {
         {/* Error */}
         {error && (
           <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-            <p className="text-sm text-destructive">{error}</p>
+            <p className="text-xs sm:text-sm text-destructive">{error}</p>
           </div>
         )}
 
         {/* Footer */}
-        <p className="mt-8 text-center text-xs text-muted-foreground">
+        <p className="mt-8 text-center text-[11px] sm:text-xs text-muted-foreground px-2">
           Data sourced from publicly available real estate listings. For informational purposes only — not affiliated with any listing provider. Verify all details with a licensed agent before making decisions.
         </p>
       </div>

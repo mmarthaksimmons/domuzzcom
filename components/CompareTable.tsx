@@ -525,10 +525,14 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
 
   return (
     <div className="w-full overflow-x-auto pb-4">
+      {/* Mobile scroll hint */}
+      <div className="block sm:hidden px-4 py-2 text-xs text-muted-foreground text-center">
+        ← Scroll to compare →
+      </div>
       <div className="min-w-fit divide-y divide-border border-b">
         {/* Header Cards Row */}
         <div className="flex px-4 py-8 gap-4">
-          <div className="w-[180px] shrink-0" /> {/* Label column spacer */}
+          <div className="w-[120px] sm:w-[180px] shrink-0" /> {/* Label column spacer */}
           {houses.map((h, i) => {
             const isBestValue = scores[i] === bestScore;
             const isCheapest = h.price === cheapestPrice;
@@ -538,7 +542,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
             const shortName = h.address.split(",")[0] || "Property";
             
             return (
-              <div key={i} className="w-[280px] shrink-0 flex flex-col gap-3">
+              <div key={i} className="w-[260px] sm:w-[280px] shrink-0 flex flex-col gap-3">
                 {/* Header info */}
                 <div className="flex flex-col gap-1.5 h-14">
                   <h3 className="font-bold text-lg leading-tight line-clamp-1">
@@ -619,11 +623,11 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
             if (row.sectionLabel !== prevSection) {
               acc.push(
                 <div key={`sec-${row.sectionLabel}`} className="flex px-4 py-4 border-t border-border/60">
-                  <div className="w-[180px] shrink-0 flex items-center font-bold text-lg">
+                  <div className="w-[120px] sm:w-[180px] shrink-0 flex items-center font-bold text-base sm:text-lg">
                     {row.sectionLabel}
                   </div>
                   {houses.map((_, i) => (
-                    <div key={i} className="w-[280px] shrink-0 ml-4" />
+                    <div key={i} className="w-[260px] sm:w-[280px] shrink-0 ml-4" />
                   ))}
                 </div>
               );
@@ -650,8 +654,8 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
 
             acc.push(
               <div key={idx} className="flex px-4 py-4 hover:bg-muted/30 transition-colors">
-                <div className="w-[180px] shrink-0 text-sm font-semibold flex items-center text-foreground flex-row gap-3">
-                  <div className="w-1 h-3 bg-muted rounded-full" />
+                <div className="w-[120px] sm:w-[180px] shrink-0 text-xs sm:text-sm font-semibold flex items-center text-foreground flex-row gap-2 sm:gap-3">
+                  <div className="w-1 h-3 bg-muted rounded-full shrink-0" />
                   {row.label}
                 </div>
                 {houses.map((h, i) => {
@@ -694,7 +698,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                   return (
                     <div
                       key={i}
-                      className={`w-[280px] shrink-0 ml-4 text-sm flex items-center whitespace-pre-line text-foreground/80 ${
+                      className={`w-[260px] sm:w-[280px] shrink-0 ml-4 text-xs sm:text-sm flex items-center whitespace-pre-line text-foreground/80 ${
                         isNumeric && bestV ? "text-green-600 font-semibold" : ""
                       } ${conditionColor}`}
                     >
@@ -724,12 +728,12 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
           {/* First-Year Cost Row */}
           {mortgages.some((m) => m.firstYearCost) && (
             <div className="flex px-4 py-4 bg-yellow-50/50 dark:bg-yellow-950/10">
-              <div className="w-[180px] shrink-0 text-sm font-semibold flex items-center gap-2 text-yellow-700 dark:text-yellow-500">
-                <AlertTriangle className="h-4 w-4" />
+              <div className="w-[120px] sm:w-[180px] shrink-0 text-xs sm:text-sm font-semibold flex items-center gap-2 text-yellow-700 dark:text-yellow-500">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
                 Est. First-Year Cost
               </div>
               {mortgages.map((m, i) => (
-                <div key={i} className="w-[280px] shrink-0 ml-4 text-sm flex items-center font-mono">
+                <div key={i} className="w-[260px] sm:w-[280px] shrink-0 ml-4 text-xs sm:text-sm flex items-center font-mono">
                   {m.firstYearCost?.totalFirstYear ? (
                     <span className="text-yellow-700 dark:text-yellow-400 font-semibold">
                       ${m.firstYearCost.totalFirstYear.toLocaleString()}
@@ -747,11 +751,11 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
             
             return (
               <div key={`nogo-${h.address}`} className="flex px-4 py-4 bg-destructive/5">
-                <div className="w-[180px] shrink-0 text-sm font-semibold flex items-center text-destructive">
+                <div className="w-[120px] sm:w-[180px] shrink-0 text-xs sm:text-sm font-semibold flex items-center text-destructive">
                   🚫 Dealbreakers
                 </div>
                 {houses.map((_, i) => (
-                  <div key={i} className="w-[280px] shrink-0 ml-4 text-sm flex items-center text-destructive font-medium">
+                  <div key={i} className="w-[260px] sm:w-[280px] shrink-0 ml-4 text-xs sm:text-sm flex items-center text-destructive font-medium">
                     {houses[i].address === h.address ? violations.join("; ") : "—"}
                   </div>
                 ))}

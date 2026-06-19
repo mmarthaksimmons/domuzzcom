@@ -119,10 +119,10 @@ export default function ProgressPanel({ onCancel }: Props) {
 
       <CardContent className="p-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-3">
           <div>
-            <h3 className="font-semibold text-lg text-foreground">Comparing Properties</h3>
-            <p className="text-sm text-muted-foreground mt-0.5">{message}</p>
+            <h3 className="font-semibold text-base sm:text-lg text-foreground">Comparing Properties</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{message}</p>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-4 w-4" />
@@ -138,7 +138,7 @@ export default function ProgressPanel({ onCancel }: Props) {
             return (
               <div
                 key={stage.key}
-                className={`flex items-center gap-3 py-2.5 px-3 rounded-lg transition-all duration-300 ${
+                className={`flex items-center gap-2 sm:gap-3 py-2.5 px-2 sm:px-3 rounded-lg transition-all duration-300 ${
                   status === "active"
                     ? "bg-primary/5 border border-primary/20 scale-[1.02]"
                     : status === "complete"
@@ -147,24 +147,24 @@ export default function ProgressPanel({ onCancel }: Props) {
                 }`}
               >
                 {/* Status icon */}
-                <div className="flex-shrink-0 w-7 flex items-center justify-center">
+                <div className="flex-shrink-0 w-5 sm:w-7 flex items-center justify-center">
                   {status === "complete" && (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                    <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />
                   )}
                   {status === "active" && (
-                    <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                    <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 text-primary animate-spin" />
                   )}
                   {status === "error" && (
-                    <XCircle className="h-5 w-5 text-destructive" />
+                    <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
                   )}
                   {status === "pending" && (
-                    <Circle className="h-5 w-5 text-muted-foreground/30" />
+                    <Circle className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground/30" />
                   )}
                 </div>
 
                 {/* Stage icon + label */}
                 <span
-                  className={`text-lg flex-shrink-0 transition-opacity duration-300 ${
+                  className={`text-base sm:text-lg flex-shrink-0 transition-opacity duration-300 ${
                     status === "pending" ? "opacity-30" : "opacity-100"
                   }`}
                 >
@@ -173,7 +173,7 @@ export default function ProgressPanel({ onCancel }: Props) {
 
                 <div className="flex-1 min-w-0">
                   <p
-                    className={`text-sm font-medium transition-colors duration-300 ${
+                    className={`text-xs sm:text-sm font-medium transition-colors duration-300 ${
                       status === "active"
                         ? "text-primary"
                         : status === "complete"
@@ -186,7 +186,7 @@ export default function ProgressPanel({ onCancel }: Props) {
                     {stage.label}
                   </p>
                   {status === "active" && (
-                    <p className="text-xs text-muted-foreground mt-0.5 animate-pulse">
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 animate-pulse">
                       {message}
                     </p>
                   )}
@@ -194,9 +194,9 @@ export default function ProgressPanel({ onCancel }: Props) {
 
                 {/* Connector line (except last item) */}
                 {idx < STAGES.length - 1 && (
-                  <div className="flex-shrink-0 w-5 flex justify-center">
+                  <div className="flex-shrink-0 w-4 sm:w-5 flex justify-center">
                     <ChevronRight
-                      className={`h-3.5 w-3.5 transition-colors duration-300 ${
+                      className={`h-3 w-3 sm:h-3.5 sm:w-3.5 transition-colors duration-300 ${
                         completedStages.has(stage.key)
                           ? "text-emerald-400"
                           : "text-muted-foreground/20"

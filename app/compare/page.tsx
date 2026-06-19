@@ -81,19 +81,21 @@ export default function ComparePage() {
     <main className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-3">
           <div className="flex items-center">
             <Image
               src="/domuzz_logo.png"
               alt="Domuzz - Property Comparison"
-              width={200}
-              height={46}
+              width={140}
+              height={32}
               priority
-              className="h-auto w-auto"
+              className="h-auto w-auto sm:w-[180px]"
             />
           </div>
           <Button
             variant="link"
+            size="sm"
+            className="self-start sm:self-auto px-0 sm:px-3"
             onClick={() => {
               sessionStorage.removeItem("compareResult");
               sessionStorage.removeItem("compareWeights");
@@ -107,11 +109,12 @@ export default function ComparePage() {
 
         {/* Comparison Table */}
         <Card className="overflow-hidden mb-6">
-          <div className="p-4 border-b flex items-center justify-between">
+          <div className="p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <h2 className="text-sm font-medium text-foreground">Comparison Results</h2>
             <Button
               variant="outline"
               size="sm"
+              className="w-full sm:w-auto"
               onClick={() => {
                 // ── Helpers matching CompareTable formatting ──
                 const fmtCur = (v: number | null) =>

@@ -74,13 +74,13 @@ export default function AiSummary({ result }: Props) {
     <Collapsible open={open} onOpenChange={setOpen}>
       <Card className="border-primary/20">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xl">🤖</span>
-              <CardTitle>AI-Powered Analysis</CardTitle>
+              <CardTitle className="text-base sm:text-lg">AI-Powered Analysis</CardTitle>
             </div>
             <CollapsibleTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="w-full sm:w-auto">
                 {open ? "Hide" : "Show"} Full Analysis
               </Button>
             </CollapsibleTrigger>
