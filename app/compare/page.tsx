@@ -108,7 +108,7 @@ export default function ComparePage() {
         </div>
 
         {/* Comparison Table */}
-        <Card className="overflow-hidden mb-6">
+        <Card className="mb-6">
           <div className="p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <h2 className="text-sm font-medium text-foreground">Comparison Results</h2>
             <Button

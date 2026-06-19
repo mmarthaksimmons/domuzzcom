@@ -538,8 +538,8 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
         ← Scroll to compare →
       </div>
       <div className="min-w-fit divide-y divide-border border-b">
-        {/* Header Cards Row */}
-        <div className="flex px-4 py-8 gap-4">
+        {/* Header Cards Row - Sticky */}
+        <div className="flex px-4 py-4 gap-4 sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border/60">
           <div className="w-[120px] sm:w-[180px] shrink-0" /> {/* Label column spacer */}
           {houses.map((h, i) => {
             const isBestValue = scores[i] === bestScore;
@@ -591,8 +591,12 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                       Eliminated
                     </div>
                   )}
+                  {/* Match Score badge */}
+                  <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-white text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg z-10">
+                    🏆 {scores[i].toFixed(1)}/10
+                  </div>
                   {/* Heart icon placeholder */}
-                  <button className="absolute top-2 right-2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition-colors backdrop-blur-sm">
+                  <button className="absolute top-10 right-2 p-1.5 rounded-full bg-white/20 hover:bg-white/40 transition-colors backdrop-blur-sm">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M12.62 20.81C12.28 20.93 11.72 20.93 11.38 20.81C8.48 19.82 2 15.69 2 8.68998C2 5.59998 4.49 3.09998 7.56 3.09998C9.38 3.09998 10.99 3.97998 12 5.33998C13.01 3.97998 14.63 3.09998 16.44 3.09998C19.51 3.09998 22 5.59998 22 8.68998C22 15.69 15.52 19.82 12.62 20.81Z" fill="white"/>
                     </svg>
@@ -611,13 +615,6 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                 </div>
 
 
-                {/* Score */}
-                <div className="mt-4 pt-4 border-t flex justify-between items-center bg-muted/30 -mx-3 px-3 py-2 rounded-lg">
-                  <span className="text-sm font-medium">Match Score</span>
-                  <span className={`font-bold ${isBestValue ? "text-green-600" : ""}`}>
-                    {scores[i].toFixed(1)} <span className="text-muted-foreground font-normal text-sm">/ 10</span>
-                  </span>
-                </div>
               </div>
             );
           })}
