@@ -532,12 +532,12 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
         : "w-[260px] sm:w-[280px] shrink-0";
 
   return (
-    <div className="w-full overflow-x-auto pb-4">
+    <div className="w-full pb-4">
       {/* Mobile scroll hint */}
       <div className="block sm:hidden px-4 py-2 text-xs text-muted-foreground text-center">
         ← Scroll to compare →
       </div>
-      <div className="min-w-fit divide-y divide-border border-b">
+      <div className="min-w-[640px] divide-y divide-border border-b">
         {/* Header Cards Row - Sticky */}
         <div className="flex px-4 py-4 gap-4 sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border/60">
           <div className="w-[120px] sm:w-[180px] shrink-0" /> {/* Label column spacer */}
