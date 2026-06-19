@@ -592,7 +592,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
                     </div>
                   )}
                   {/* Match Score badge */}
-                  <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-white text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg z-10">
+                  <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-white text-sm font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg z-10">
                     🏆 {scores[i].toFixed(1)}/10
                   </div>
                   {/* Heart icon placeholder */}
