@@ -269,28 +269,36 @@ function sanitizeAiResult(result: Record<string, unknown>): Record<string, unkno
  * Repair common JSON formatting issues from LLM output:
  * - Trailing commas before } or ]
  * - Consecutive commas
- * - Missing commas between properties
+ * - Orphaned string literals without property names
  * - Truncated output with "..."
  * - Unterminated string values (close them before closing brackets)
- * - Extra garbage characters like ." at the end
  */
 function repairJson(json: string): string {
-  let repaired = json
+  let repaired = json;
+  
+  // CRITICAL FIX: Remove orphaned string literals that appear after properly closed strings
+  // The AI sometimes generates fragments like: "proper text"\n"orphan text"\n"another orphan"\n}
+  
+  // Strategy: Find orphaned quoted strings (strings not preceded by a colon or comma)
+  // and remove them if they appear before closing brackets
+  
+  // First pass: Remove sequences of orphaned strings before closing brackets
+  // Pattern: closing quote, newlines, then one or more orphaned quoted strings, then closing bracket
+  repaired = repaired.replace(/("\s*)\n+(?:\s*"[^"]*"\s*\n*)+(\s*[}\]])/g, '$1\n$2');
+  
+  // Second pass: Catch any remaining orphaned strings (not preceded by : or ,)
+  // This handles cases where orphans appear without newlines
+  repaired = repaired.replace(/([^:,\[])\s*"[^"]*"\s*(?=\s*[}\]])/g, '$1');
+  
+  // Now handle simpler repairs
+  repaired = repaired
     // Remove trailing commas before } or ]
     .replace(/,(\s*[}\]])/g, "$1")
     // Remove consecutive commas
     .replace(/,\s*,/g, ",")
     // Fix "..." truncation from AI
     .replace(/"\.\.\.",?/g, '""')
-    .replace(/\.\.\.\s*$/, "")
-    // CRITICAL FIX: Remove garbage between closing quote and structural characters
-    // Pattern: " followed by whitespace/newlines, then dots/periods, then more whitespace, then } or ] or ,
-    // This catches patterns like: "\n.\n}" or "\n."\n}" or ". }" etc.
-    .replace(/("\s*(?:\n|\r\n?)*)\s*\.+\s*(?:"?\s*(?:\n|\r\n?)*)?\s*([}\],])/g, '$1$2')
-    // Fix unescaped newlines in string values (common in AI output) - but do this BEFORE the above
-    // Actually, let's NOT do the global newline replacement as it's interfering with the pattern matching
-    // .replace(/(?<!\\)\n/g, "\\n");
-    ;
+    .replace(/\.\.\.\s*$/, "");
 
   // If the JSON ends abruptly (missing closing brackets), close them
   // First, detect unterminated string (odd number of quotes before the end)
