@@ -53,25 +53,5 @@ export function normalize(raw: any): House {
     listingUrl: raw.hdpUrl ? `https://www.zillow.com${raw.hdpUrl}` : "—",
     lat: raw.latitude ?? raw.lat ?? null,
     lng: raw.longitude ?? raw.lng ?? null,
-    // --- Listing Intelligence fields ---
-    priceHistory: raw.priceHistory ?? null,
-    taxHistory: raw.taxHistory ?? null,
-    annualHomeownersInsurance: raw.annualHomeownersInsurance ?? null,
-    pageViewCount: raw.pageViewCount ?? null,
-    favoriteCount: raw.favoriteCount ?? null,
-    thirdPartyVirtualTour: raw.thirdPartyVirtualTour ?? null,
-    sellingSoon: raw.sellingSoon ?? null,
-    resoFactsExtended: raw.resoFacts
-      ? {
-          flooring: joinArray(raw.resoFacts.flooring),
-          foundationDetails: joinArray(raw.resoFacts.foundationDetails),
-          roofType: joinArray(raw.resoFacts.roofType),
-          sewer: joinArray(raw.resoFacts.sewer),
-          waterSource: joinArray(raw.resoFacts.waterSource),
-          appliances: joinArray(raw.resoFacts.appliances),
-          constructionMaterials: joinArray(raw.resoFacts.constructionMaterials),
-          listingTerms: joinArray(raw.resoFacts.listingTerms),
-        }
-      : null,
   };
 }

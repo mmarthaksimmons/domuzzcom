@@ -131,68 +131,40 @@ Return JSON: { summary, perHouse:[{address,pros,cons,score,monthlyEstimate,affor
     // Fall through to balanced-brace extraction
   }
 
-  // SIMPLE APPROACH: Extract JSON with proper string handling
+  // Extract JSON object using balanced-brace matching
   const start = content.indexOf("{");
   if (start === -1) {
     throw new Error(`No JSON object found in model response: ${content.slice(0, 200)}`);
   }
 
-  // Find the matching closing brace while properly tracking strings
   let depth = 0;
-  let inString = false;
-  let escaped = false;
   let end = -1;
-  
   for (let i = start; i < content.length; i++) {
-    const ch = content[i];
-    
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    
-    if (ch === '\\') {
-      escaped = true;
-      continue;
-    }
-    
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-    
-    if (inString) continue; // Skip everything inside strings
-    
-    if (ch === "{") depth++;
-    if (ch === "}") {
+    if (content[i] === "{") depth++;
+    if (content[i] === "}") {
       depth--;
       if (depth === 0) {
         end = i;
-        break; // Found the matching closing brace
+        break;
       }
     }
   }
 
   if (end === -1) {
-    throw new Error(`Unbalanced JSON braces in model response`);
+    throw new Error(`Unbalanced JSON braces in model response: ${content.slice(0, 200)}`);
   }
 
-  let extracted = content.slice(start, end + 1);
+  const extracted = content.slice(start, end + 1);
 
-  // Simple cleanup: remove any orphaned content before the final }
-  // Look for the last properly formatted property, then remove garbage before }
-  extracted = extracted.replace(/("\s*)\n+\s*"[^:]*"\s*\n*\s*([}\]])/g, '$1\n$2');
-  
-  // Try to parse
+  // Try to parse the extracted JSON
   try {
     return sanitizeAiResult(JSON.parse(extracted));
   } catch (parseErr: any) {
+    // Attempt to repair common AI JSON issues before giving up
     console.error("JSON parse error:", parseErr.message);
-    console.error("Failing JSON (last 500 chars):", extracted.slice(-500));
-    
-    // Last resort: try to fix and re-parse
+    console.error("Failing JSON (last 300 chars):", extracted.slice(-300));
     const repaired = repairJson(extracted);
-    console.log("Repaired JSON (last 200 chars):", repaired.slice(-200));
+    console.log("Repaired JSON (last 300 chars):", repaired.slice(-300));
     return sanitizeAiResult(JSON.parse(repaired));
   }
 }
@@ -297,36 +269,21 @@ function sanitizeAiResult(result: Record<string, unknown>): Record<string, unkno
  * Repair common JSON formatting issues from LLM output:
  * - Trailing commas before } or ]
  * - Consecutive commas
- * - Orphaned string literals without property names
+ * - Missing commas between properties
  * - Truncated output with "..."
  * - Unterminated string values (close them before closing brackets)
  */
 function repairJson(json: string): string {
-  let repaired = json;
-  
-  // CRITICAL FIX: Remove orphaned string literals that appear after properly closed strings
-  // The AI sometimes generates fragments like: "proper text"\n"orphan text"\n"another orphan"\n}
-  
-  // Strategy: Find orphaned quoted strings (strings not preceded by a colon or comma)
-  // and remove them if they appear before closing brackets
-  
-  // First pass: Remove sequences of orphaned strings before closing brackets
-  // Pattern: closing quote, newlines, then one or more orphaned quoted strings, then closing bracket
-  repaired = repaired.replace(/("\s*)\n+(?:\s*"[^"]*"\s*\n*)+(\s*[}\]])/g, '$1\n$2');
-  
-  // Second pass: Catch any remaining orphaned strings (not preceded by : or ,)
-  // This handles cases where orphans appear without newlines
-  repaired = repaired.replace(/([^:,\[])\s*"[^"]*"\s*(?=\s*[}\]])/g, '$1');
-  
-  // Now handle simpler repairs
-  repaired = repaired
+  let repaired = json
     // Remove trailing commas before } or ]
     .replace(/,(\s*[}\]])/g, "$1")
     // Remove consecutive commas
     .replace(/,\s*,/g, ",")
     // Fix "..." truncation from AI
     .replace(/"\.\.\.",?/g, '""')
-    .replace(/\.\.\.\s*$/, "");
+    .replace(/\.\.\.\s*$/, "")
+    // Fix unescaped newlines in string values (common in AI output)
+    .replace(/(?<!\\)\n/g, "\\n");
 
   // If the JSON ends abruptly (missing closing brackets), close them
   // First, detect unterminated string (odd number of quotes before the end)

@@ -79,7 +79,6 @@ export default function Home() {
 
     const controller = new AbortController();
     abortRef.current = controller;
-    let hasRedirected = false; // Flag to prevent multiple redirects
 
     try {
       const res = await fetch("/api/compare/stream", {
@@ -106,6 +105,7 @@ export default function Home() {
 
       const decoder = new TextDecoder();
       let buffer = "";
+      let finalResult: Record<string, unknown> | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -126,31 +126,17 @@ export default function Home() {
 
               if (eventType === "progress") {
                 dispatchProgress(data.stage, data.message, data.progress);
-              } else if (eventType === "done" && !hasRedirected) {
-                hasRedirected = true; // Mark that we're redirecting
+              } else if (eventType === "done") {
+                finalResult = data;
                 const { skippedStages, ...result } = data;
                 dispatchDone();
 
-                console.log("✅ Comparison complete, saving to sessionStorage...");
-                
-                // Save to sessionStorage
                 sessionStorage.setItem("compareResult", JSON.stringify(result));
                 sessionStorage.setItem("compareWeights", JSON.stringify(weights));
                 sessionStorage.setItem("compareNoGoFilters", JSON.stringify(noGoFilters));
                 if (userProfile.income > 0) {
                   sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
                 }
-                
-                console.log("🔄 Redirecting to /compare NOW...");
-                
-                // IMMEDIATE redirect - don't wait for anything
-                // Use window.location as it's more reliable than router.push in streaming contexts
-                window.location.href = "/compare";
-                
-                // Clean up stream in background (don't await it)
-                reader.cancel().catch(() => {});  
-                
-                return; // Exit function
               } else if (eventType === "error") {
                 throw new Error(data.message ?? "An unexpected error occurred");
               }
@@ -162,18 +148,16 @@ export default function Home() {
           }
         }
       }
-    } catch (err: any) {
-      if (err.name === "AbortError") {
-        console.log("Request was aborted");
-        return;
+
+      if (finalResult) {
+        router.push("/compare");
       }
-      console.error("Comparison error:", err);
+    } catch (err: any) {
+      if (err.name === "AbortError") return;
       setError(err.message);
       setShowProgress(false);
     } finally {
-      if (!hasRedirected) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
