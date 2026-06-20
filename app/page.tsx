@@ -79,6 +79,7 @@ export default function Home() {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    let hasRedirected = false; // Flag to prevent multiple redirects
 
     try {
       const res = await fetch("/api/compare/stream", {
@@ -105,7 +106,6 @@ export default function Home() {
 
       const decoder = new TextDecoder();
       let buffer = "";
-      let finalResult: Record<string, unknown> | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -126,11 +126,14 @@ export default function Home() {
 
               if (eventType === "progress") {
                 dispatchProgress(data.stage, data.message, data.progress);
-              } else if (eventType === "done") {
-                finalResult = data;
+              } else if (eventType === "done" && !hasRedirected) {
+                hasRedirected = true; // Mark that we're redirecting
                 const { skippedStages, ...result } = data;
                 dispatchDone();
 
+                console.log("✅ Comparison complete, saving to sessionStorage and redirecting...");
+                
+                // Save to sessionStorage
                 sessionStorage.setItem("compareResult", JSON.stringify(result));
                 sessionStorage.setItem("compareWeights", JSON.stringify(weights));
                 sessionStorage.setItem("compareNoGoFilters", JSON.stringify(noGoFilters));
@@ -138,10 +141,33 @@ export default function Home() {
                   sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
                 }
                 
-                // Redirect immediately when done event is received
-                // Don't wait for stream to close (may not close properly on Vercel)
-                router.push("/compare");
-                return; // Exit the stream reading loop
+                // Cancel the stream reader
+                try {
+                  await reader.cancel();
+                } catch (e) {
+                  console.log("Stream cancel error (can be ignored):", e);
+                }
+                
+                // Clean up states before redirect
+                setLoading(false);
+                setShowProgress(false);
+                
+                // Use multiple redirect strategies for maximum reliability
+                setTimeout(() => {
+                  console.log("🔄 Attempting router.push redirect...");
+                  router.push("/compare");
+                  
+                  // Fallback: use window.location as backup after 500ms
+                  setTimeout(() => {
+                    // Only redirect with window.location if we're still on the home page
+                    if (window.location.pathname === "/") {
+                      console.log("⚠️ Router redirect didn't work, using window.location...");
+                      window.location.href = "/compare";
+                    }
+                  }, 500);
+                }, 100);
+                
+                return; // Exit function
               } else if (eventType === "error") {
                 throw new Error(data.message ?? "An unexpected error occurred");
               }
@@ -153,14 +179,18 @@ export default function Home() {
           }
         }
       }
-
-      // Redirect happens immediately in the "done" event handler above
     } catch (err: any) {
-      if (err.name === "AbortError") return;
+      if (err.name === "AbortError") {
+        console.log("Request was aborted");
+        return;
+      }
+      console.error("Comparison error:", err);
       setError(err.message);
       setShowProgress(false);
     } finally {
-      setLoading(false);
+      if (!hasRedirected) {
+        setLoading(false);
+      }
     }
   };
 
