@@ -423,7 +423,7 @@ export default function Home() {
                 </CollapsibleContent>
               </Collapsible>
 
-              <div className="flex">
+              <div className="flex justify-end">
                 <Button onClick={() => setStep(1)} className="w-full sm:w-auto">
                   Next →
                 </Button>

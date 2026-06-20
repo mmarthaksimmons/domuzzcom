@@ -516,6 +516,123 @@ export default function ComparePage() {
                   ].join(",")
                 );
 
+                // ── Listing Intelligence ──
+                pushSection("--- Listing Intelligence ---");
+                const fmtPriceChange = (ph: typeof data.houses[0]["priceHistory"]) => {
+                  if (!ph || ph.length === 0) return "No changes";
+                  const changes = ph.filter((p: { event: string }) => p.event === "Price change");
+                  if (changes.length === 0) return "No changes";
+                  const last = changes[changes.length - 1];
+                  const prev = changes.length > 1 ? changes[changes.length - 2] : null;
+                  if (last.price != null && prev?.price != null) {
+                    const diff = last.price - prev.price;
+                    const sign = diff >= 0 ? "+" : "";
+                    const dateStr = last.date ? new Date(last.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+                    return `"${sign}$${(Math.abs(diff)).toLocaleString()} (${dateStr})"`;
+                  }
+                  return "Price changed";
+                };
+                const fmtLastSold = (ph: typeof data.houses[0]["priceHistory"]) => {
+                  if (!ph || ph.length === 0) return "—";
+                  const sold = ph.filter((p: { event: string }) => p.event === "Sold");
+                  if (sold.length === 0) return "—";
+                  const last = sold[sold.length - 1];
+                  return last.date ? new Date(last.date).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "—";
+                };
+                csvRows.push(
+                  [
+                    "Price Changes",
+                    ...data.houses.map((h) => fmtPriceChange(h.priceHistory)),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Last Sold",
+                    ...data.houses.map((h) => fmtLastSold(h.priceHistory)),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Tax Assessed Value",
+                    ...data.houses.map((h) => {
+                      const th = h.taxHistory;
+                      if (!th || th.length === 0) return "—";
+                      return csvEscape(fmtCur(th[0].value ?? null));
+                    }),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Annual Insurance",
+                    ...data.houses.map((h) =>
+                      csvEscape(fmtCur(h.annualHomeownersInsurance ?? null))
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Page Views",
+                    ...data.houses.map((h) =>
+                      h.pageViewCount != null ? `${h.pageViewCount.toLocaleString()} 👁` : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Saves",
+                    ...data.houses.map((h) =>
+                      h.favoriteCount != null ? `${h.favoriteCount.toLocaleString()} ❤️` : "—"
+                    ),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Flooring",
+                    ...data.houses.map((h) => csvEscape(h.resoFactsExtended?.flooring ?? "—")),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Foundation",
+                    ...data.houses.map((h) => csvEscape(h.resoFactsExtended?.foundationDetails ?? "—")),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Roof",
+                    ...data.houses.map((h) => csvEscape(h.resoFactsExtended?.roofType ?? "—")),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Sewer",
+                    ...data.houses.map((h) => csvEscape(h.resoFactsExtended?.sewer ?? "—")),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Water",
+                    ...data.houses.map((h) => csvEscape(h.resoFactsExtended?.waterSource ?? "—")),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Appliances",
+                    ...data.houses.map((h) => csvEscape(h.resoFactsExtended?.appliances ?? "—")),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Construction",
+                    ...data.houses.map((h) => csvEscape(h.resoFactsExtended?.constructionMaterials ?? "—")),
+                  ].join(",")
+                );
+                csvRows.push(
+                  [
+                    "Listing Terms",
+                    ...data.houses.map((h) => csvEscape(h.resoFactsExtended?.listingTerms ?? "—")),
+                  ].join(",")
+                );
                 // ── Schools ──
                 pushSection("--- Schools ---");
                 csvRows.push(

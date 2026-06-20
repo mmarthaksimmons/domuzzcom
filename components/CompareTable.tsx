@@ -51,6 +51,29 @@ function formatCondition(condition: string | null | undefined): string {
   }
 }
 
+function formatPriceChange(priceHistory: { date: string; event: string; price?: number }[] | null | undefined): string {
+  if (!priceHistory || priceHistory.length === 0) return "No changes";
+  const changes = priceHistory.filter((p) => p.event === "Price change");
+  if (changes.length === 0) return "No changes";
+  const last = changes[changes.length - 1];
+  const prev = changes.length > 1 ? changes[changes.length - 2] : null;
+  if (last.price != null && prev?.price != null) {
+    const diff = last.price - prev.price;
+    const sign = diff >= 0 ? "+" : "";
+    const dateStr = last.date ? new Date(last.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+    return `${sign}$${(Math.abs(diff)).toLocaleString()} (${dateStr})`;
+  }
+  return "Price changed";
+}
+
+function formatLastSold(priceHistory: { date: string; event: string }[] | null | undefined): string {
+  if (!priceHistory || priceHistory.length === 0) return "—";
+  const sold = priceHistory.filter((p) => p.event === "Sold");
+  if (sold.length === 0) return "—";
+  const last = sold[sold.length - 1];
+  return last.date ? new Date(last.date).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "—";
+}
+
 function formatRisk(risk: string | null | undefined): string {
   if (!risk) return "—";
   switch (risk) {
@@ -407,6 +430,93 @@ function buildSections(): SectionDef[] {
       ],
     },
     {
+      label: "Listing Intelligence",
+      rows: [
+        {
+          label: "Price Changes",
+          extract: ({ house }) => formatPriceChange(house.priceHistory),
+          format: "string",
+        },
+        {
+          label: "Last Sold",
+          extract: ({ house }) => formatLastSold(house.priceHistory),
+          format: "string",
+        },
+        {
+          label: "Tax Assessed Value",
+          extract: ({ house }) => {
+            const th = house.taxHistory;
+            if (!th || th.length === 0) return null;
+            return th[0].value ?? null;
+          },
+          format: "currency",
+          higherBetter: false,
+        },
+        {
+          label: "Annual Insurance",
+          extract: ({ house }) => house.annualHomeownersInsurance ?? null,
+          format: "currency",
+          higherBetter: false,
+        },
+        {
+          label: "Page Views",
+          extract: ({ house }) => {
+            const v = house.pageViewCount;
+            return v != null ? `${v.toLocaleString()} 👁` : null;
+          },
+          format: "string",
+        },
+        {
+          label: "Saves",
+          extract: ({ house }) => {
+            const v = house.favoriteCount;
+            return v != null ? `${v.toLocaleString()} ❤️` : null;
+          },
+          format: "string",
+        },
+        {
+          label: "Flooring",
+          extract: ({ house }) => house.resoFactsExtended?.flooring ?? null,
+          format: "string",
+        },
+        {
+          label: "Foundation",
+          extract: ({ house }) => house.resoFactsExtended?.foundationDetails ?? null,
+          format: "string",
+        },
+        {
+          label: "Roof",
+          extract: ({ house }) => house.resoFactsExtended?.roofType ?? null,
+          format: "string",
+        },
+        {
+          label: "Sewer",
+          extract: ({ house }) => house.resoFactsExtended?.sewer ?? null,
+          format: "string",
+        },
+        {
+          label: "Water",
+          extract: ({ house }) => house.resoFactsExtended?.waterSource ?? null,
+          format: "string",
+        },
+        {
+          label: "Appliances",
+          extract: ({ house }) => house.resoFactsExtended?.appliances ?? null,
+          format: "string",
+        },
+        {
+          label: "Construction",
+          extract: ({ house }) => house.resoFactsExtended?.constructionMaterials ?? null,
+          format: "string",
+        },
+        {
+          label: "Listing Terms",
+          extract: ({ house }) => house.resoFactsExtended?.listingTerms ?? null,
+          format: "string",
+        },
+      ],
+    },
+    {
       label: "Major Systems",
       rows: [
         {
@@ -621,7 +731,7 @@ export default function CompareTable({ houses, weights, userProfile, noGoViolati
         </div>
 
         {/* Comparison Rows */}
-        <div className="flex flex-col gap-0 pb-8 mt-2">
+        <div className="flex flex-col gap-0 pb-2 mt-2">
           {flatRows.reduce<React.ReactElement[]>((acc, row, idx) => {
             // Section header when section changes
             const prevSection = idx > 0 ? flatRows[idx - 1].sectionLabel : null;

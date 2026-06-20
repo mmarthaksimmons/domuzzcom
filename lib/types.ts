@@ -1,3 +1,37 @@
+export interface PriceHistoryEntry {
+  date: string;
+  event: string; // "Price change", "Sold", "Listed"
+  price?: number;
+  pricePerSquareFoot?: number;
+}
+
+export interface TaxHistoryEntry {
+  year: number;
+  value?: number;
+  taxPaid?: number;
+}
+
+export interface SellingSoon {
+  percentile: number; // e.g. 46 meaning "46% likely to sell soon"
+  score?: number;
+}
+
+export interface ThirdPartyVirtualTour {
+  externalUrl?: string;
+  provider?: string;
+}
+
+export interface ResoFacts {
+  flooring?: string | null;
+  foundationDetails?: string | null;
+  roofType?: string | null;
+  sewer?: string | null;
+  waterSource?: string | null;
+  appliances?: string | null;
+  constructionMaterials?: string | null;
+  listingTerms?: string | null;
+}
+
 export interface SystemAgeEstimate {
   /** Estimated age of roof in years (null if unknown) */
   roofAge: number | null;
@@ -58,6 +92,22 @@ export interface House {
   lng: number | null;
   /** Age-based big-ticket system estimates (roof, HVAC, water heater) */
   systemAges?: SystemAgeEstimate;
+  /** Price history events (Price change, Sold, Listed) */
+  priceHistory?: PriceHistoryEntry[];
+  /** Tax assessment history */
+  taxHistory?: TaxHistoryEntry[];
+  /** Annual homeowners insurance from listing */
+  annualHomeownersInsurance?: number | null;
+  /** Page view count on Zillow */
+  pageViewCount?: number | null;
+  /** Favorite/save count on Zillow */
+  favoriteCount?: number | null;
+  /** Third-party virtual tour URL */
+  thirdPartyVirtualTour?: ThirdPartyVirtualTour | null;
+  /** Selling soon prediction */
+  sellingSoon?: SellingSoon | null;
+  /** Additional RESO facts for Listing Intelligence */
+  resoFactsExtended?: ResoFacts | null;
 }
 
 export type Weights = Record<string, number>; // e.g. { price: 5, schools: 4, size: 3, taxes: 3 }
