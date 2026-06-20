@@ -131,40 +131,68 @@ Return JSON: { summary, perHouse:[{address,pros,cons,score,monthlyEstimate,affor
     // Fall through to balanced-brace extraction
   }
 
-  // Extract JSON object using balanced-brace matching
+  // SIMPLE APPROACH: Extract JSON with proper string handling
   const start = content.indexOf("{");
   if (start === -1) {
     throw new Error(`No JSON object found in model response: ${content.slice(0, 200)}`);
   }
 
+  // Find the matching closing brace while properly tracking strings
   let depth = 0;
+  let inString = false;
+  let escaped = false;
   let end = -1;
+  
   for (let i = start; i < content.length; i++) {
-    if (content[i] === "{") depth++;
-    if (content[i] === "}") {
+    const ch = content[i];
+    
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    
+    if (inString) continue; // Skip everything inside strings
+    
+    if (ch === "{") depth++;
+    if (ch === "}") {
       depth--;
       if (depth === 0) {
         end = i;
-        break;
+        break; // Found the matching closing brace
       }
     }
   }
 
   if (end === -1) {
-    throw new Error(`Unbalanced JSON braces in model response: ${content.slice(0, 200)}`);
+    throw new Error(`Unbalanced JSON braces in model response`);
   }
 
-  const extracted = content.slice(start, end + 1);
+  let extracted = content.slice(start, end + 1);
 
-  // Try to parse the extracted JSON
+  // Simple cleanup: remove any orphaned content before the final }
+  // Look for the last properly formatted property, then remove garbage before }
+  extracted = extracted.replace(/("\s*)\n+\s*"[^:]*"\s*\n*\s*([}\]])/g, '$1\n$2');
+  
+  // Try to parse
   try {
     return sanitizeAiResult(JSON.parse(extracted));
   } catch (parseErr: any) {
-    // Attempt to repair common AI JSON issues before giving up
     console.error("JSON parse error:", parseErr.message);
-    console.error("Failing JSON (last 300 chars):", extracted.slice(-300));
+    console.error("Failing JSON (last 500 chars):", extracted.slice(-500));
+    
+    // Last resort: try to fix and re-parse
     const repaired = repairJson(extracted);
-    console.log("Repaired JSON (last 300 chars):", repaired.slice(-300));
+    console.log("Repaired JSON (last 200 chars):", repaired.slice(-200));
     return sanitizeAiResult(JSON.parse(repaired));
   }
 }
