@@ -109,55 +109,52 @@ export default function Home() {
 
       while (true) {
         const { done, value } = await reader.read();
+        if (done) break;
 
-        // Process any data even on the final chunk — on Vercel the last
-        // enqueued chunk often arrives with done=true, so we must handle
-        // the value before breaking.
-        if (value) {
-          buffer += decoder.decode(value, { stream: !done });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
 
-          let eventType = "";
-          for (const line of lines) {
-            if (line.startsWith("event: ")) {
-              eventType = line.slice(7).trim();
-            } else if (line.startsWith("data: ")) {
-              const dataStr = line.slice(6);
-              try {
-                const data = JSON.parse(dataStr);
+        let eventType = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            const dataStr = line.slice(6);
+            try {
+              const data = JSON.parse(dataStr);
 
-                if (eventType === "progress") {
-                  dispatchProgress(data.stage, data.message, data.progress);
-                } else if (eventType === "done") {
-                  finalResult = data;
-                  const { skippedStages, ...result } = data;
-                  dispatchDone();
+              if (eventType === "progress") {
+                dispatchProgress(data.stage, data.message, data.progress);
+              } else if (eventType === "done") {
+                finalResult = data;
+                const { skippedStages, ...result } = data;
+                dispatchDone();
 
-                  sessionStorage.setItem("compareResult", JSON.stringify(result));
-                  sessionStorage.setItem("compareWeights", JSON.stringify(weights));
-                  sessionStorage.setItem("compareNoGoFilters", JSON.stringify(noGoFilters));
-                  if (userProfile.income > 0) {
-                    sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
-                  }
-                } else if (eventType === "error") {
-                  throw new Error(data.message ?? "An unexpected error occurred");
+                sessionStorage.setItem("compareResult", JSON.stringify(result));
+                sessionStorage.setItem("compareWeights", JSON.stringify(weights));
+                sessionStorage.setItem("compareNoGoFilters", JSON.stringify(noGoFilters));
+                if (userProfile.income > 0) {
+                  sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
                 }
-              } catch (parseErr: any) {
-                if (parseErr?.message && !parseErr.message.includes("JSON")) {
-                  throw parseErr;
-                }
+                
+                // Redirect immediately when done event is received
+                // Don't wait for stream to close (may not close properly on Vercel)
+                router.push("/compare");
+                return; // Exit the stream reading loop
+              } else if (eventType === "error") {
+                throw new Error(data.message ?? "An unexpected error occurred");
+              }
+            } catch (parseErr: any) {
+              if (parseErr?.message && !parseErr.message.includes("JSON")) {
+                throw parseErr;
               }
             }
           }
         }
-
-        if (done) break;
       }
 
-      if (finalResult) {
-        router.push("/compare");
-      }
+      // Redirect happens immediately in the "done" event handler above
     } catch (err: any) {
       if (err.name === "AbortError") return;
       setError(err.message);
