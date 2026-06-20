@@ -520,59 +520,6 @@ export default function ComparePage() {
                 pushSection("--- Listing Intelligence ---");
                 csvRows.push(
                   [
-                    "Price Changes",
-                    ...data.houses.map((h) => {
-                      if (!h.priceHistory) return "—";
-                      const changes = h.priceHistory.filter((ph) => ph.event === "Price change");
-                      if (changes.length === 0) return "No changes";
-                      const latest = changes[0];
-                      const amount = latest.price ? `$${(latest.price / 1000).toFixed(0)}k` : "";
-                      const date = latest.date ? new Date(latest.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : "";
-                      return csvEscape(changes.length > 1 ? `${changes.length} changes (last: ${amount} ${date})` : `${amount} (${date})`);
-                    }),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Last Sold",
-                    ...data.houses.map((h) => {
-                      if (!h.priceHistory) return "—";
-                      const sold = h.priceHistory.filter((ph) => ph.event === "Sold");
-                      if (sold.length === 0) return "—";
-                      const date = new Date(sold[0].date);
-                      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                    }),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Tax Assessed Value",
-                    ...data.houses.map((h) => {
-                      if (!h.taxHistory || h.taxHistory.length === 0) return "—";
-                      return csvEscape(fmtCur(h.taxHistory[0].value));
-                    }),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Annual Insurance",
-                    ...data.houses.map((h) => csvEscape(fmtCur(h.annualHomeownersInsurance ?? null))),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Page Views",
-                    ...data.houses.map((h) => h.pageViewCount ? `${h.pageViewCount.toLocaleString()} 👁` : "—"),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Saves",
-                    ...data.houses.map((h) => h.favoriteCount ? `${h.favoriteCount.toLocaleString()} ❤️` : "—"),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
                     "Flooring",
                     ...data.houses.map((h) => h.flooring ? csvEscape(`"${h.flooring}"`) : "—"),
                   ].join(",")

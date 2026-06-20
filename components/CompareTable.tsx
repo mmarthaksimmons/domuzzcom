@@ -409,60 +409,6 @@ function buildSections(): SectionDef[] {
     {
       label: "Listing Intelligence",
       rows: [
-        {
-          label: "Price Changes",
-          extract: ({ house }) => {
-            if (!house.priceHistory) return "—";
-            const changes = house.priceHistory.filter((h) => h.event === "Price change");
-            if (changes.length === 0) return "No changes";
-            const latest = changes[0];
-            const amount = latest.price ? `$${(latest.price / 1000).toFixed(0)}k` : "";
-            const date = latest.date ? new Date(latest.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : "";
-            return changes.length > 1 ? `${changes.length} changes (last: ${amount} ${date})` : `${amount} (${date})`;
-          },
-          format: "string",
-        },
-        {
-          label: "Last Sold",
-          extract: ({ house }) => {
-            if (!house.priceHistory) return "—";
-            const sold = house.priceHistory.filter((h) => h.event === "Sold");
-            if (sold.length === 0) return "—";
-            const date = new Date(sold[0].date);
-            return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-          },
-          format: "string",
-        },
-        {
-          label: "Tax Assessed Value",
-          extract: ({ house }) => {
-            if (!house.taxHistory || house.taxHistory.length === 0) return null;
-            return house.taxHistory[0].value;
-          },
-          format: "currency",
-        },
-        {
-          label: "Annual Insurance",
-          fieldKey: "annualHomeownersInsurance",
-          format: "currency",
-          higherBetter: false,
-        },
-        {
-          label: "Page Views",
-          extract: ({ house }) => {
-            if (!house.pageViewCount) return "—";
-            return `${house.pageViewCount.toLocaleString()} 👁`;
-          },
-          format: "string",
-        },
-        {
-          label: "Saves",
-          extract: ({ house }) => {
-            if (!house.favoriteCount) return "—";
-            return `${house.favoriteCount.toLocaleString()} ❤️`;
-          },
-          format: "string",
-        },
         { label: "Flooring", fieldKey: "flooring", format: "string" },
         { label: "Foundation", fieldKey: "foundationDetails", format: "string" },
         { label: "Roof", fieldKey: "roofType", format: "string" },

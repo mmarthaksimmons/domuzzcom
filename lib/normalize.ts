@@ -55,11 +55,11 @@ export function normalize(raw: any): House {
     lng: raw.longitude ?? raw.lng ?? null,
     
     // Listing Intelligence fields
-    priceHistory: raw.priceHistory ?? null,
-    taxHistory: raw.taxHistory ?? null,
-    annualHomeownersInsurance: raw.annualHomeownersInsurance ?? null,
-    pageViewCount: raw.pageViewCount ?? null,
-    favoriteCount: raw.favoriteCount ?? null,
+    priceHistory: Array.isArray(raw.priceHistory) ? raw.priceHistory : undefined,
+    taxHistory: Array.isArray(raw.taxHistory) ? raw.taxHistory : undefined,
+    annualHomeownersInsurance: typeof raw.annualHomeownersInsurance === "number" ? raw.annualHomeownersInsurance : null,
+    pageViewCount: typeof raw.pageViewCount === "number" ? raw.pageViewCount : null,
+    favoriteCount: typeof raw.favoriteCount === "number" ? raw.favoriteCount : null,
     flooring: joinArray(raw.resoFacts?.flooring) ?? null,
     foundationDetails: joinArray(raw.resoFacts?.foundationDetails) ?? null,
     roofType: joinArray(raw.resoFacts?.roofType) ?? raw.resoFacts?.roof ?? null,
