@@ -516,63 +516,6 @@ export default function ComparePage() {
                   ].join(",")
                 );
 
-                // ── Listing Intelligence ──
-                pushSection("--- Listing Intelligence ---");
-                csvRows.push(
-                  [
-                    "Flooring",
-                    ...data.houses.map((h) => h.flooring ? csvEscape(`"${h.flooring}"`) : "—"),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Foundation",
-                    ...data.houses.map((h) => h.foundationDetails ? csvEscape(`"${h.foundationDetails}"`) : "—"),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Roof",
-                    ...data.houses.map((h) => h.roofType ? csvEscape(`"${h.roofType}"`) : "—"),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Sewer",
-                    ...data.houses.map((h) => {
-                      if (!h.sewer) return "—";
-                      return h.sewer.toLowerCase().includes("septic") ? csvEscape(`"${h.sewer} ⚠️"`) : csvEscape(`"${h.sewer}"`);
-                    }),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Water",
-                    ...data.houses.map((h) => {
-                      if (!h.waterSource) return "—";
-                      return h.waterSource.toLowerCase().includes("well") ? csvEscape(`"${h.waterSource} ⚠️"`) : csvEscape(`"${h.waterSource}"`);
-                    }),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Appliances",
-                    ...data.houses.map((h) => h.appliances ? csvEscape(`"${h.appliances}"`) : "—"),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Construction",
-                    ...data.houses.map((h) => h.constructionMaterials ? csvEscape(`"${h.constructionMaterials}"`) : "—"),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Listing Terms",
-                    ...data.houses.map((h) => h.listingTerms ? csvEscape(`"${h.listingTerms}"`) : "—"),
-                  ].join(",")
-                );
-
                 // ── Schools ──
                 pushSection("--- Schools ---");
                 csvRows.push(

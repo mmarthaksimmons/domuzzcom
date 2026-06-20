@@ -407,33 +407,6 @@ function buildSections(): SectionDef[] {
       ],
     },
     {
-      label: "Listing Intelligence",
-      rows: [
-        { label: "Flooring", fieldKey: "flooring", format: "string" },
-        { label: "Foundation", fieldKey: "foundationDetails", format: "string" },
-        { label: "Roof", fieldKey: "roofType", format: "string" },
-        {
-          label: "Sewer",
-          extract: ({ house }) => {
-            if (!house.sewer) return "—";
-            return house.sewer.toLowerCase().includes("septic") ? `${house.sewer} ⚠️` : house.sewer;
-          },
-          format: "string",
-        },
-        {
-          label: "Water",
-          extract: ({ house }) => {
-            if (!house.waterSource) return "—";
-            return house.waterSource.toLowerCase().includes("well") ? `${house.waterSource} ⚠️` : house.waterSource;
-          },
-          format: "string",
-        },
-        { label: "Appliances", fieldKey: "appliances", format: "string" },
-        { label: "Construction", fieldKey: "constructionMaterials", format: "string" },
-        { label: "Listing Terms", fieldKey: "listingTerms", format: "string" },
-      ],
-    },
-    {
       label: "Major Systems",
       rows: [
         {

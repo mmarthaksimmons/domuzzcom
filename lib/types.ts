@@ -58,21 +58,6 @@ export interface House {
   lng: number | null;
   /** Age-based big-ticket system estimates (roof, HVAC, water heater) */
   systemAges?: SystemAgeEstimate;
-  
-  // Listing Intelligence fields
-  priceHistory?: { event: string; date: string; price?: number }[];
-  taxHistory?: { value: number; year: number }[];
-  annualHomeownersInsurance?: number | null;
-  pageViewCount?: number | null;
-  favoriteCount?: number | null;
-  flooring?: string | null;
-  foundationDetails?: string | null;
-  roofType?: string | null;
-  sewer?: string | null;
-  waterSource?: string | null;
-  appliances?: string | null;
-  constructionMaterials?: string | null;
-  listingTerms?: string | null;
 }
 
 export type Weights = Record<string, number>; // e.g. { price: 5, schools: 4, size: 3, taxes: 3 }
