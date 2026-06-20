@@ -272,6 +272,7 @@ function sanitizeAiResult(result: Record<string, unknown>): Record<string, unkno
  * - Missing commas between properties
  * - Truncated output with "..."
  * - Unterminated string values (close them before closing brackets)
+ * - Extra garbage characters like ." at the end
  */
 function repairJson(json: string): string {
   let repaired = json
@@ -282,8 +283,14 @@ function repairJson(json: string): string {
     // Fix "..." truncation from AI
     .replace(/"\.\.\.",?/g, '""')
     .replace(/\.\.\.\s*$/, "")
-    // Fix unescaped newlines in string values (common in AI output)
-    .replace(/(?<!\\)\n/g, "\\n");
+    // CRITICAL FIX: Remove garbage between closing quote and structural characters
+    // Pattern: " followed by whitespace/newlines, then dots/periods, then more whitespace, then } or ] or ,
+    // This catches patterns like: "\n.\n}" or "\n."\n}" or ". }" etc.
+    .replace(/("\s*(?:\n|\r\n?)*)\s*\.+\s*(?:"?\s*(?:\n|\r\n?)*)?\s*([}\],])/g, '$1$2')
+    // Fix unescaped newlines in string values (common in AI output) - but do this BEFORE the above
+    // Actually, let's NOT do the global newline replacement as it's interfering with the pattern matching
+    // .replace(/(?<!\\)\n/g, "\\n");
+    ;
 
   // If the JSON ends abruptly (missing closing brackets), close them
   // First, detect unterminated string (odd number of quotes before the end)
