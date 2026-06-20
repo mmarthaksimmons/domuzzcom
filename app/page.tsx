@@ -131,7 +131,7 @@ export default function Home() {
                 const { skippedStages, ...result } = data;
                 dispatchDone();
 
-                console.log("✅ Comparison complete, saving to sessionStorage and redirecting...");
+                console.log("✅ Comparison complete, saving to sessionStorage...");
                 
                 // Save to sessionStorage
                 sessionStorage.setItem("compareResult", JSON.stringify(result));
@@ -141,31 +141,14 @@ export default function Home() {
                   sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
                 }
                 
-                // Cancel the stream reader
-                try {
-                  await reader.cancel();
-                } catch (e) {
-                  console.log("Stream cancel error (can be ignored):", e);
-                }
+                console.log("🔄 Redirecting to /compare NOW...");
                 
-                // Clean up states before redirect
-                setLoading(false);
-                setShowProgress(false);
+                // IMMEDIATE redirect - don't wait for anything
+                // Use window.location as it's more reliable than router.push in streaming contexts
+                window.location.href = "/compare";
                 
-                // Use multiple redirect strategies for maximum reliability
-                setTimeout(() => {
-                  console.log("🔄 Attempting router.push redirect...");
-                  router.push("/compare");
-                  
-                  // Fallback: use window.location as backup after 500ms
-                  setTimeout(() => {
-                    // Only redirect with window.location if we're still on the home page
-                    if (window.location.pathname === "/") {
-                      console.log("⚠️ Router redirect didn't work, using window.location...");
-                      window.location.href = "/compare";
-                    }
-                  }, 500);
-                }, 100);
+                // Clean up stream in background (don't await it)
+                reader.cancel().catch(() => {});  
                 
                 return; // Exit function
               } else if (eventType === "error") {
