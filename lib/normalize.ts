@@ -1,7 +1,7 @@
 import { House } from "./types";
 
 function formatLotSize(raw: any): string | null {
-  const lotSize = raw.lotSize ?? raw.lotAreaValue;
+  const lotSize = raw.lotAreaValue ?? raw.lotSize;
   const lotUnits = raw.lotAreaUnits;
   if (lotSize == null) return null;
   if (lotUnits === "Acres") {
