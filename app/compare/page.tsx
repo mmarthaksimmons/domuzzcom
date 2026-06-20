@@ -117,10 +117,8 @@ export default function ComparePage() {
               className="w-full sm:w-auto"
               onClick={() => {
                 // ── Helpers matching CompareTable formatting ──
-                const csvEscape = (val: string) =>
-                  val.includes(",") || val.includes('"') || val.includes("\n")
-                    ? `"${val.replace(/"/g, '""')}"`
-                    : val;
+                const csvQuote = (val: string) =>
+                  `"${val.replace(/"/g, '""')}"`;
                 const fmtCur = (v: number | null) =>
                   v != null ? `$${v.toLocaleString()}` : "—";
                 const fmtPct = (v: number | null) =>
@@ -325,26 +323,26 @@ export default function ComparePage() {
                 csvRows.push(
                   [
                     "Home Type",
-                    ...data.houses.map((h) => h.homeType ?? "—"),
+                    ...data.houses.map((h) => csvQuote(h.homeType ?? "—")),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Status",
-                    ...data.houses.map((h) => h.status ?? "—"),
+                    ...data.houses.map((h) => csvQuote(h.status ?? "—")),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Price",
-                    ...data.houses.map((h) => csvEscape(fmtCur(h.price))),
+                    ...data.houses.map((h) => csvQuote(fmtCur(h.price))),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Est. Monthly Payment",
                     ...data.houses.map((_, i) =>
-                      csvEscape(fmtCur(mortgages[i]?.monthlyPayment ?? null))
+                      csvQuote(fmtCur(mortgages[i]?.monthlyPayment ?? null))
                     ),
                   ].join(",")
                 );
@@ -352,7 +350,7 @@ export default function ComparePage() {
                   [
                     "Est. Annual Tax",
                     ...data.houses.map((_, i) =>
-                      csvEscape(fmtCur(mortgages[i]?.annualTax ?? null))
+                      csvQuote(fmtCur(mortgages[i]?.annualTax ?? null))
                     ),
                   ].join(",")
                 );
@@ -360,7 +358,7 @@ export default function ComparePage() {
                   [
                     "Est. Annual Insurance",
                     ...data.houses.map((_, i) =>
-                      csvEscape(fmtCur(mortgages[i]?.annualInsurance ?? null))
+                      csvQuote(fmtCur(mortgages[i]?.annualInsurance ?? null))
                     ),
                   ].join(",")
                 );
@@ -371,9 +369,9 @@ export default function ComparePage() {
                   [
                     "Interest Rate",
                     ...data.houses.map((_, i) =>
-                      mortgages[i]
+                      csvQuote(mortgages[i]
                         ? `${mortgages[i].interestRate.toFixed(2)}%`
-                        : "—"
+                        : "—")
                     ),
                   ].join(",")
                 );
@@ -382,7 +380,7 @@ export default function ComparePage() {
                     "DTI Ratio",
                     ...data.houses.map((_, i) => {
                       const d = mortgages[i]?.dtiRatio;
-                      return d != null ? `${(d * 100).toFixed(2)}%` : "—";
+                      return csvQuote(d != null ? `${(d * 100).toFixed(2)}%` : "—");
                     }),
                   ].join(",")
                 );
@@ -390,7 +388,7 @@ export default function ComparePage() {
                   [
                     "Down Payment",
                     ...data.houses.map((_, i) =>
-                      csvEscape(fmtCur(mortgages[i]?.cashNeeded.downPayment ?? null))
+                      csvQuote(fmtCur(mortgages[i]?.cashNeeded.downPayment ?? null))
                     ),
                   ].join(",")
                 );
@@ -398,7 +396,7 @@ export default function ComparePage() {
                   [
                     "Cash Needed (incl. closing)",
                     ...data.houses.map((_, i) =>
-                      csvEscape(fmtCur(mortgages[i]?.cashNeeded.total ?? null))
+                      csvQuote(fmtCur(mortgages[i]?.cashNeeded.total ?? null))
                     ),
                   ].join(",")
                 );
@@ -408,20 +406,20 @@ export default function ComparePage() {
                 csvRows.push(
                   [
                     "Beds",
-                    ...data.houses.map((h) => h.beds ?? "—"),
+                    ...data.houses.map((h) => csvQuote(String(h.beds ?? "—"))),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Baths",
-                    ...data.houses.map((h) => h.baths ?? "—"),
+                    ...data.houses.map((h) => csvQuote(String(h.baths ?? "—"))),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Sqft",
                     ...data.houses.map((h) =>
-                      h.sqft != null ? String(h.sqft) : "—"
+                      csvQuote(h.sqft != null ? String(h.sqft) : "—")
                     ),
                   ].join(",")
                 );
@@ -429,9 +427,9 @@ export default function ComparePage() {
                   [
                     "Price/sqft",
                     ...data.houses.map((h) =>
-                      h.pricePerSqft != null
-                        ? csvEscape(`$${h.pricePerSqft.toLocaleString()}`)
-                        : "—"
+                      csvQuote(h.pricePerSqft != null
+                        ? `$${h.pricePerSqft.toLocaleString()}`
+                        : "—")
                     ),
                   ].join(",")
                 );
@@ -439,20 +437,20 @@ export default function ComparePage() {
                   [
                     "Lot Size",
                     ...data.houses.map((h) =>
-                      h.lotSize ? `"${h.lotSize}"` : "—"
+                      csvQuote(h.lotSize ? h.lotSize : "—")
                     ),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Stories",
-                    ...data.houses.map((h) => h.stories ?? "—"),
+                    ...data.houses.map((h) => csvQuote(String(h.stories ?? "—"))),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Year Built",
-                    ...data.houses.map((h) => h.yearBuilt ?? "—"),
+                    ...data.houses.map((h) => csvQuote(String(h.yearBuilt ?? "—"))),
                   ].join(",")
                 );
 
@@ -461,26 +459,26 @@ export default function ComparePage() {
                 csvRows.push(
                   [
                     "Garage",
-                    ...data.houses.map((h) => h.garage ?? "—"),
+                    ...data.houses.map((h) => csvQuote(String(h.garage ?? "—"))),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Pool",
-                    ...data.houses.map((h) => fmtBool(h.hasPool)),
+                    ...data.houses.map((h) => csvQuote(fmtBool(h.hasPool))),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Fireplace",
-                    ...data.houses.map((h) => fmtBool(h.hasFireplace)),
+                    ...data.houses.map((h) => csvQuote(fmtBool(h.hasFireplace))),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Heating",
                     ...data.houses.map((h) =>
-                      h.heating ? `"${h.heating}"` : "—"
+                      csvQuote(h.heating ? h.heating : "—")
                     ),
                   ].join(",")
                 );
@@ -488,7 +486,7 @@ export default function ComparePage() {
                   [
                     "Cooling",
                     ...data.houses.map((h) =>
-                      h.cooling ? `"${h.cooling}"` : "—"
+                      csvQuote(h.cooling ? h.cooling : "—")
                     ),
                   ].join(",")
                 );
@@ -498,21 +496,21 @@ export default function ComparePage() {
                 csvRows.push(
                   [
                     "HOA (Monthly)",
-                    ...data.houses.map((h) => csvEscape(fmtCur(h.hoaMonthly))),
+                    ...data.houses.map((h) => csvQuote(fmtCur(h.hoaMonthly))),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Tax Rate",
                     ...data.houses.map((h) =>
-                      fmtPct(normalizeTaxRate(h.propertyTaxRate))
+                      csvQuote(fmtPct(normalizeTaxRate(h.propertyTaxRate)))
                     ),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Days on Zillow",
-                    ...data.houses.map((h) => h.daysOnZillow ?? "—"),
+                    ...data.houses.map((h) => csvQuote(String(h.daysOnZillow ?? "—"))),
                   ].join(",")
                 );
 
@@ -522,7 +520,7 @@ export default function ComparePage() {
                   [
                     "Nearby Schools",
                     ...data.houses.map((h) =>
-                      `"${fmtSchools(h.schools)}"`
+                      csvQuote(fmtSchools(h.schools))
                     ),
                   ].join(",")
                 );
@@ -531,19 +529,19 @@ export default function ComparePage() {
                 csvRows.push(
                   [
                     "Weighted Score",
-                    ...scores.map((s) => `${s.toFixed(1)} / 10`),
+                    ...scores.map((s) => csvQuote(`${s.toFixed(1)} / 10`)),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Score Breakdown",
                     ...scores.map((s, i) =>
-                      s === bestScore
+                      csvQuote(s === bestScore
                         ? "🏆 Best"
                         : `${(
                             ((s - bestScore) / bestScore) *
                             100
-                          ).toFixed(0)}% below best`
+                          ).toFixed(0)}% below best`)
                     ),
                   ].join(",")
                 );
@@ -555,8 +553,8 @@ export default function ComparePage() {
                       "Est. First-Year Cost",
                       ...mortgages.map((m) =>
                         m.firstYearCost?.totalFirstYear
-                          ? csvEscape(`$${m.firstYearCost.totalFirstYear.toLocaleString()}`)
-                          : "—"
+                      ? csvQuote(`$${m.firstYearCost.totalFirstYear.toLocaleString()}`)
+                      : "—"
                       ),
                     ].join(",")
                   );
@@ -567,32 +565,32 @@ export default function ComparePage() {
                 csvRows.push(
                   [
                     "Big-Ticket Risk",
-                    ...data.houses.map((h) => h.systemAges?.bigTicketRisk ?? "—"),
+                    ...data.houses.map((h) => csvQuote(h.systemAges?.bigTicketRisk ?? "—")),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Est. 5yr Big Repairs",
                     ...data.houses.map((h) =>
-                      h.systemAges?.totalEstimatedBigRepairs
-                        ? csvEscape(`$${h.systemAges.totalEstimatedBigRepairs.toLocaleString()}`)
-                        : "—"
+                      csvQuote(h.systemAges?.totalEstimatedBigRepairs
+                        ? `$${h.systemAges.totalEstimatedBigRepairs.toLocaleString()}`
+                        : "—")
                     ),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Roof Condition",
-                    ...data.houses.map((h) => h.systemAges?.roofCondition ?? "—"),
+                    ...data.houses.map((h) => csvQuote(h.systemAges?.roofCondition ?? "—")),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Roof Repl. Cost",
                     ...data.houses.map((h) =>
-                      h.systemAges?.roofReplacementEstimate
-                        ? csvEscape(`$${h.systemAges.roofReplacementEstimate.toLocaleString()}`)
-                        : "—"
+                      csvQuote(h.systemAges?.roofReplacementEstimate
+                        ? `$${h.systemAges.roofReplacementEstimate.toLocaleString()}`
+                        : "—")
                     ),
                   ].join(",")
                 );
@@ -601,24 +599,24 @@ export default function ComparePage() {
                     "Roof Remaining Life",
                     ...data.houses.map((h) => {
                       const r = h.systemAges?.roofRemainingLife;
-                      if (r == null) return "—";
-                      return r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`;
+                      if (r == null) return csvQuote("—");
+                      return csvQuote(r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`);
                     }),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "HVAC Condition",
-                    ...data.houses.map((h) => h.systemAges?.hvacCondition ?? "—"),
+                    ...data.houses.map((h) => csvQuote(h.systemAges?.hvacCondition ?? "—")),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "HVAC Repl. Cost",
                     ...data.houses.map((h) =>
-                      h.systemAges?.hvacReplacementEstimate
-                        ? csvEscape(`$${h.systemAges.hvacReplacementEstimate.toLocaleString()}`)
-                        : "—"
+                      csvQuote(h.systemAges?.hvacReplacementEstimate
+                        ? `$${h.systemAges.hvacReplacementEstimate.toLocaleString()}`
+                        : "—")
                     ),
                   ].join(",")
                 );
@@ -627,24 +625,24 @@ export default function ComparePage() {
                     "HVAC Remaining Life",
                     ...data.houses.map((h) => {
                       const r = h.systemAges?.hvacRemainingLife;
-                      if (r == null) return "—";
-                      return r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`;
+                      if (r == null) return csvQuote("—");
+                      return csvQuote(r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`);
                     }),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "Water Heater Condition",
-                    ...data.houses.map((h) => h.systemAges?.waterHeaterCondition ?? "—"),
+                    ...data.houses.map((h) => csvQuote(h.systemAges?.waterHeaterCondition ?? "—")),
                   ].join(",")
                 );
                 csvRows.push(
                   [
                     "WH Repl. Cost",
                     ...data.houses.map((h) =>
-                      h.systemAges?.waterHeaterReplacementEstimate
-                        ? csvEscape(`$${h.systemAges.waterHeaterReplacementEstimate.toLocaleString()}`)
-                        : "—"
+                      csvQuote(h.systemAges?.waterHeaterReplacementEstimate
+                        ? `$${h.systemAges.waterHeaterReplacementEstimate.toLocaleString()}`
+                        : "—")
                     ),
                   ].join(",")
                 );
@@ -653,8 +651,8 @@ export default function ComparePage() {
                     "WH Remaining Life",
                     ...data.houses.map((h) => {
                       const r = h.systemAges?.waterHeaterRemainingLife;
-                      if (r == null) return "—";
-                      return r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`;
+                      if (r == null) return csvQuote("—");
+                      return csvQuote(r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`);
                     }),
                   ].join(",")
                 );
@@ -670,7 +668,7 @@ export default function ComparePage() {
                       ...data.houses.map((h) => {
                         const v = noGoViolations[h.address];
                         return v && v.length > 0
-                          ? `"${v.join("; ")}"`
+                          ? csvQuote(v.join("; "))
                           : "—";
                       }),
                     ].join(",")
