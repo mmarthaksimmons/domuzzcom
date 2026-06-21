@@ -139,12 +139,10 @@ export default function ProgressPanel({ onCancel }: Props) {
             {autoCancelled ? (
               <div className="mt-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
                 <p className="text-sm font-semibold text-destructive">
-                  ⚠️ Process automatically stopped
+                  The server is busy
                 </p>
                 <p className="text-xs text-destructive/80 mt-1">
-                  The comparison timed out after 2 minutes. This happens when the system encounters
-                  an issue processing the AI response. Please start a new comparison — it typically
-                  works on the next attempt.
+                  The process could not complete this time. Please run the comparison again.
                 </p>
               </div>
             ) : !isStalled ? (
@@ -154,11 +152,10 @@ export default function ProgressPanel({ onCancel }: Props) {
             ) : (
               <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
                 <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                  ⚠️ Taking longer than expected
+                  Taking longer than expected
                 </p>
                 <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
-                  The comparison is taking more than 2 minutes and will be stopped shortly.
-                  Please start a new comparison — it typically works on the next attempt.
+                  The server is busy. The process will stop shortly — please run it again.
                 </p>
               </div>
             )}
@@ -275,13 +272,13 @@ export default function ProgressPanel({ onCancel }: Props) {
         {autoCancelled && (
           <div className="mt-6 pt-4 border-t flex flex-col items-center gap-3">
             <p className="text-xs text-muted-foreground text-center max-w-xs">
-              The system may have encountered a temporary issue. Restarting the comparison usually resolves it.
+              The server is busy right now. Please run the process again.
             </p>
             <button
               onClick={onCancel}
               className="px-4 py-2 text-sm font-medium bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-lg transition-colors"
             >
-              Start New Comparison
+              Run Again
             </button>
           </div>
         )}
