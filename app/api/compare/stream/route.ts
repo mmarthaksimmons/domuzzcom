@@ -23,12 +23,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (userProfile) {
-      if (typeof userProfile.income !== "number" || userProfile.income < 0)
-        return new Response(JSON.stringify({ error: "Invalid annual income" }), { status: 400, headers: { "Content-Type": "application/json" } });
-      if (typeof userProfile.creditScore !== "number" || userProfile.creditScore < 300 || userProfile.creditScore > 850)
-        return new Response(JSON.stringify({ error: "Credit score must be between 300 and 850" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    if (!userProfile) {
+      return new Response(JSON.stringify({ error: "Financial profile (income + credit score) is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
+    if (typeof userProfile.income !== "number" || userProfile.income < 0)
+      return new Response(JSON.stringify({ error: "Invalid annual income" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    if (typeof userProfile.creditScore !== "number" || userProfile.creditScore < 300 || userProfile.creditScore > 850)
+      return new Response(JSON.stringify({ error: "Credit score must be between 300 and 850" }), { status: 400, headers: { "Content-Type": "application/json" } });
 
     const trimmedAddresses = addresses.map((a: string) => a.trim()).filter(Boolean);
     if (trimmedAddresses.length === 0) {

@@ -18,13 +18,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate userProfile if provided
-    if (userProfile) {
-      if (typeof userProfile.income !== "number" || userProfile.income < 0)
-        return NextResponse.json({ error: "Invalid annual income" }, { status: 400 });
-      if (typeof userProfile.creditScore !== "number" || userProfile.creditScore < 300 || userProfile.creditScore > 850)
-        return NextResponse.json({ error: "Credit score must be between 300 and 850" }, { status: 400 });
+    // Validate userProfile is required
+    if (!userProfile) {
+      return NextResponse.json({ error: "Financial profile (income + credit score) is required" }, { status: 400 });
     }
+    if (typeof userProfile.income !== "number" || userProfile.income < 0)
+      return NextResponse.json({ error: "Invalid annual income" }, { status: 400 });
+    if (typeof userProfile.creditScore !== "number" || userProfile.creditScore < 300 || userProfile.creditScore > 850)
+      return NextResponse.json({ error: "Credit score must be between 300 and 850" }, { status: 400 });
 
     const trimmedAddresses = addresses.map((a: string) => a.trim()).filter(Boolean);
 

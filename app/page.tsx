@@ -44,7 +44,7 @@ export default function Home() {
   const [addresses, setAddresses] = useState<string[]>(["", "", ""]);
   const [userProfile, setUserProfile] = useState<UserProfile>({
     income: 0,
-    creditScore: 700,
+    creditScore: 0,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +87,7 @@ export default function Home() {
         body: JSON.stringify({
           addresses: addresses.filter((a) => a.trim()),
           weights,
-          userProfile: userProfile.income > 0 ? userProfile : null,
+          userProfile,
           noGoFilters,
         }),
         signal: controller.signal,
@@ -134,9 +134,7 @@ export default function Home() {
                 sessionStorage.setItem("compareResult", JSON.stringify(result));
                 sessionStorage.setItem("compareWeights", JSON.stringify(weights));
                 sessionStorage.setItem("compareNoGoFilters", JSON.stringify(noGoFilters));
-                if (userProfile.income > 0) {
-                  sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
-                }
+                sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
               } else if (eventType === "error") {
                 throw new Error(data.message ?? "An unexpected error occurred");
               }
@@ -166,7 +164,7 @@ export default function Home() {
       case 0:
         return true; // weights always have defaults
       case 1:
-        return true; // financial profile is optional
+        return userProfile.income > 0 && userProfile.creditScore >= 300; // financial profile is required
       case 2:
         return addresses.filter((a) => a.trim()).length >= 2;
       default:
@@ -438,7 +436,7 @@ export default function Home() {
             <CardHeader>
               <CardTitle>Step 2: Your Financial Profile</CardTitle>
               <CardDescription>
-                Optional — helps the AI assess affordability, commute, and total cost of ownership.
+                Required — helps the AI assess affordability, commute, and total cost of ownership.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -458,6 +456,7 @@ export default function Home() {
                         income: e.target.value ? Number(e.target.value) : 0,
                       }))
                     }
+                    required
                   />
                 </div>
                 <div className="grid gap-2">
@@ -465,14 +464,17 @@ export default function Home() {
                   <Input
                     id="credit-score"
                     type="number"
+                    min={300}
+                    max={850}
                     placeholder="e.g. 720"
                     value={userProfile.creditScore || ""}
                     onChange={(e) =>
                       setUserProfile((prev) => ({
                         ...prev,
-                        creditScore: e.target.value ? Number(e.target.value) : 300,
+                        creditScore: e.target.value ? Number(e.target.value) : 0,
                       }))
                     }
+                    required
                   />
                 </div>
               </div>
