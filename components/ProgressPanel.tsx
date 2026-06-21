@@ -27,6 +27,8 @@ interface Props {
   onCancel?: () => void;
 }
 
+const MAX_WAIT_SECONDS = 120; // 2 minutes before auto-cancelling
+
 export default function ProgressPanel({ onCancel }: Props) {
   const [currentStage, setCurrentStage] = useState<string | null>(null);
   const [completedStages, setCompletedStages] = useState<Set<string>>(new Set());
@@ -34,15 +36,26 @@ export default function ProgressPanel({ onCancel }: Props) {
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("Starting comparison...");
   const [elapsed, setElapsed] = useState(0);
+  const [isStalled, setIsStalled] = useState(false);
+  const [autoCancelled, setAutoCancelled] = useState(false);
   const startRef = useRef(Date.now());
+  const hasAutoCancelled = useRef(false);
 
-  // Elapsed timer
+  // Elapsed timer + auto-cancel after timeout
   useEffect(() => {
     const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
+      const secs = Math.floor((Date.now() - startRef.current) / 1000);
+      setElapsed(secs);
+      if (secs >= MAX_WAIT_SECONDS && !hasAutoCancelled.current) {
+        setIsStalled(true);
+        hasAutoCancelled.current = true;
+        setAutoCancelled(true);
+        // Auto-cancel the comparison after 2 minutes
+        onCancel?.();
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [onCancel]);
 
   // Listen for progress events from parent via custom events
   useEffect(() => {
@@ -123,13 +136,38 @@ export default function ProgressPanel({ onCancel }: Props) {
           <div>
             <h3 className="font-semibold text-base sm:text-lg text-foreground">Comparing Properties</h3>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{message}</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 font-medium">
-              ⏱️ This comparison may take up to 2 minutes to complete. Please do not close this page.
-            </p>
+            {autoCancelled ? (
+              <div className="mt-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                <p className="text-sm font-semibold text-destructive">
+                  ⚠️ Process automatically stopped
+                </p>
+                <p className="text-xs text-destructive/80 mt-1">
+                  The comparison timed out after 2 minutes. This happens when the system encounters
+                  an issue processing the AI response. Please start a new comparison — it typically
+                  works on the next attempt.
+                </p>
+              </div>
+            ) : !isStalled ? (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 font-medium">
+                ⏱️ This comparison may take up to 2 minutes to complete. Please do not close this page.
+              </p>
+            ) : (
+              <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                  ⚠️ Taking longer than expected
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
+                  The comparison is taking more than 2 minutes and will be stopped shortly.
+                  Please start a new comparison — it typically works on the next attempt.
+                </p>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-4 w-4" />
-            <span className="text-sm font-mono tabular-nums">{formatTime(elapsed)}</span>
+            <span className={`text-sm font-mono tabular-nums ${isStalled ? "text-amber-600 dark:text-amber-400 font-bold" : ""}`}>
+              {formatTime(elapsed)}
+            </span>
           </div>
         </div>
 
@@ -212,14 +250,38 @@ export default function ProgressPanel({ onCancel }: Props) {
           })}
         </div>
 
-        {/* Cancel button */}
-        {onCancel && currentStage !== "done" && !failedStage && (
-          <div className="mt-6 pt-4 border-t flex justify-center">
+        {/* Cancel / Restart button */}
+        {onCancel && currentStage !== "done" && !failedStage && !autoCancelled && (
+          <div className="mt-6 pt-4 border-t flex flex-col items-center gap-2">
+            {isStalled ? (
+              <button
+                onClick={onCancel}
+                className="px-4 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors"
+              >
+                Cancel & Restart
+              </button>
+            ) : (
+              <button
+                onClick={onCancel}
+                className="text-sm text-muted-foreground hover:text-destructive transition-colors underline underline-offset-4"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Auto-cancelled - prompt restart */}
+        {autoCancelled && (
+          <div className="mt-6 pt-4 border-t flex flex-col items-center gap-3">
+            <p className="text-xs text-muted-foreground text-center max-w-xs">
+              The system may have encountered a temporary issue. Restarting the comparison usually resolves it.
+            </p>
             <button
               onClick={onCancel}
-              className="text-sm text-muted-foreground hover:text-destructive transition-colors underline underline-offset-4"
+              className="px-4 py-2 text-sm font-medium bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-lg transition-colors"
             >
-              Cancel
+              Start New Comparison
             </button>
           </div>
         )}
