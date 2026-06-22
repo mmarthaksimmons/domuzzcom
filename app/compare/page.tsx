@@ -680,7 +680,7 @@ export default function ComparePage() {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = "zillow-comparison.csv";
+                a.download = "house-comparison.csv";
                 a.click();
                 URL.revokeObjectURL(url);
               }}
