@@ -1,668 +1,145 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
 import Image from "next/image";
-import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-} from "@/components/ui/collapsible";
-import { useRouter } from "next/navigation";
-import { Weights, UserProfile, NoGoFilters, DEFAULT_NO_GO } from "@/lib/types";
+import Link from "next/link";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import ProgressPanel from "@/components/ProgressPanel";
+import { ArrowRight, Scale, FileText, Wrench } from "lucide-react";
 
-const DEFAULT_WEIGHTS: Weights = {
-  price: 5,
-  schools: 4,
-  size: 3,
-  lotSize: 2,
-  taxes: 3,
-};
+interface ToolCard {
+  title: string;
+  description: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  cta: string;
+  available: boolean;
+}
 
-const CRITERIA = [
-  { key: "price", label: "💰 Price", desc: "Lower is better", default: 5 },
-  { key: "schools", label: "🏫 Schools", desc: "School quality", default: 4 },
-  { key: "size", label: "📐 Size", desc: "Square footage", default: 3 },
-  { key: "lotSize", label: "🏡 Lot Size", desc: "Land area", default: 2 },
-  { key: "taxes", label: "🏛️ Taxes", desc: "Property tax rate", default: 3 },
-  { key: "bigTicketRisk", label: "🔧 Big Repairs", desc: "Estimated upcoming roof/HVAC costs", default: 4 },
-] as const;
+const tools: ToolCard[] = [
+  {
+    title: "Property Comparison",
+    description:
+      "Compare up to 3 properties side-by-side with AI-powered insights on price, schools, taxes, big-ticket repairs, and more. Export to CSV.",
+    href: "/compare",
+    icon: Scale,
+    cta: "Compare Now",
+    available: true,
+  },
+  {
+    title: "CMA Report",
+    description:
+      "Generate a Comparative Market Analysis for any US property. Get AI-driven valuation estimates, recent comps, and a printable PDF report.",
+    href: "/cma",
+    icon: FileText,
+    cta: "Run CMA",
+    available: true,
+  },
+  {
+    title: "Renovation ROI",
+    description:
+      "Estimate return on investment for common home renovations. See which upgrades add the most value before you spend.",
+    href: "#",
+    icon: Wrench,
+    cta: "Coming Soon",
+    available: false,
+  },
+];
 
-const STEPS = ["Priorities", "Financial Profile", "Property Addresses"];
-
-export default function Home() {
-  const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [weights, setWeights] = useState<Weights>(DEFAULT_WEIGHTS);
-  const [addresses, setAddresses] = useState<string[]>(["", "", ""]);
-  const [userProfile, setUserProfile] = useState<UserProfile>({
-    income: 0,
-    creditScore: 0,
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [noGoFilters, setNoGoFilters] = useState<NoGoFilters>(DEFAULT_NO_GO);
-  const [dealbreakersOpen, setDealbreakersOpen] = useState(false);
-  const [showProgress, setShowProgress] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-
-  const dispatchProgress = (stage: string, message: string, progress: number) => {
-    window.dispatchEvent(
-      new CustomEvent("compare-progress", {
-        detail: { stage, message, progress },
-      })
-    );
-  };
-
-  const dispatchDone = () => {
-    window.dispatchEvent(new CustomEvent("compare-done"));
-  };
-
-  const handleCancel = useCallback(() => {
-    abortRef.current?.abort();
-    setShowProgress(false);
-    setLoading(false);
-    setError("Comparison cancelled");
-  }, []);
-
-  const handleCompare = async () => {
-    setLoading(true);
-    setError(null);
-    setShowProgress(true);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const res = await fetch("/api/compare/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          addresses: addresses.filter((a) => a.trim()),
-          weights,
-          userProfile,
-          noGoFilters,
-        }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: "Failed to compare properties" }));
-        throw new Error(errData.error ?? "Failed to compare properties");
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) {
-        throw new Error("No response stream available");
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let finalResult: Record<string, unknown> | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        let eventType = "";
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            eventType = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            const dataStr = line.slice(6);
-            try {
-              const data = JSON.parse(dataStr);
-
-              if (eventType === "progress") {
-                dispatchProgress(data.stage, data.message, data.progress);
-              } else if (eventType === "done") {
-                finalResult = data;
-                const { skippedStages, ...result } = data;
-                dispatchDone();
-
-                sessionStorage.setItem("compareResult", JSON.stringify(result));
-                sessionStorage.setItem("compareWeights", JSON.stringify(weights));
-                sessionStorage.setItem("compareNoGoFilters", JSON.stringify(noGoFilters));
-                sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
-              } else if (eventType === "error") {
-                throw new Error(data.message ?? "An unexpected error occurred");
-              }
-            } catch (parseErr: any) {
-              if (parseErr?.message && !parseErr.message.includes("JSON")) {
-                throw parseErr;
-              }
-            }
-          }
-        }
-      }
-
-      if (finalResult) {
-        router.push("/compare");
-      }
-    } catch (err: any) {
-      if (err.name === "AbortError") return;
-      setError(err.message);
-      setShowProgress(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const canProceed = () => {
-    switch (step) {
-      case 0:
-        return true; // weights always have defaults
-      case 1:
-        return userProfile.income > 0 && userProfile.creditScore >= 300; // financial profile is required
-      case 2:
-        return addresses.filter((a) => a.trim()).length >= 2;
-      default:
-        return false;
-    }
-  };
-
+export default function HomePage() {
   return (
     <main className="min-h-screen bg-background">
-      <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12">
-        {/* Header */}
-        <div className="text-center mb-8 sm:mb-10">
-          <div className="flex justify-center mb-2">
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="max-w-4xl mx-auto px-4 py-16 sm:py-24 text-center">
+          <div className="flex justify-center mb-6">
             <Image
               src="/domuzz_logo.png"
-              alt="Domuzz - House Compare Made Easy"
-              width={180}
-              height={41}
+              alt="Domuzz"
+              width={220}
+              height={50}
               priority
-              className="h-auto w-auto sm:w-[260px]"
+              className="h-auto w-auto sm:w-[320px]"
             />
           </div>
-          <p className="text-muted-foreground text-sm sm:text-base">
-            Compare up to 3 properties side-by-side and export to CSV
+          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
+            Free real estate tools for smarter home buying decisions. No sign-up, no paywall — just honest data.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Button asChild size="lg" className="w-full sm:w-auto">
+              <Link href="/compare">
+                <Scale className="h-4 w-4 mr-2" />
+                Compare Properties
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+              <Link href="/cma">
+                <FileText className="h-4 w-4 mr-2" />
+                Run a CMA
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Tools Grid */}
+      <section className="max-w-5xl mx-auto px-4 pb-16 sm:pb-24">
+        <div className="text-center mb-10">
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Our Free Tools</h2>
+          <p className="text-sm text-muted-foreground mt-2">
+            Built to help you make confident real estate decisions
           </p>
         </div>
 
-        {/* Step Indicator */}
-        <div className="flex items-center justify-center gap-1 sm:gap-2 mb-8">
-          {STEPS.map((s, i) => (
-            <div key={s} className="flex items-center gap-1 sm:gap-2">
-              <div
-                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-medium ${
-                  i <= step
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground"
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {tools.map((tool) => {
+            const Icon = tool.icon;
+            return (
+              <Card
+                key={tool.title}
+                className={`relative flex flex-col transition-shadow hover:shadow-md ${
+                  !tool.available ? "opacity-60" : ""
                 }`}
               >
-                {i + 1}
-              </div>
-              <span
-                className={`text-xs sm:text-sm ${
-                  i === step ? "font-semibold text-foreground" : "text-muted-foreground"
-                }`}
-              >
-                {s}
-              </span>
-              {i < STEPS.length - 1 && (
-                <div
-                  className={`w-4 sm:w-8 h-0.5 ${
-                    i < step ? "bg-primary" : "bg-muted"
-                  }`}
-                />
-              )}
-            </div>
-          ))}
+                <CardHeader>
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <CardTitle className="text-base sm:text-lg">{tool.title}</CardTitle>
+                  </div>
+                  <CardDescription className="text-sm leading-relaxed">
+                    {tool.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="mt-auto pt-0">
+                  {tool.available ? (
+                    <Button asChild variant="secondary" className="w-full">
+                      <Link href={tool.href}>
+                        {tool.cta}
+                        <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button disabled variant="secondary" className="w-full">
+                      {tool.cta}
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
+      </section>
 
-        {/* Progress Panel (shown during comparison) */}
-        {showProgress && (
-          <ProgressPanel onCancel={handleCancel} />
-        )}
+      <Separator />
 
-        {/* Slide 1: Priorities & Dealbreakers */}
-        {!showProgress && step === 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Step 1: Set Your Priorities</CardTitle>
-              <CardDescription>
-                Drag each slider to weight what matters most (1 = least, 5 = most important)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {CRITERIA.map(({ key, label, desc, default: def }) => (
-                <div key={key} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base">{label}</Label>
-                      <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
-                    </div>
-                    <Badge variant="secondary" className="font-mono text-xs">
-                      {weights[key] ?? def}/5
-                    </Badge>
-                  </div>
-                  <Slider
-                    value={[weights[key] ?? def]}
-                    onValueChange={([val]) =>
-                      setWeights((prev) => ({ ...prev, [key]: val }))
-                    }
-                    min={1}
-                    max={5}
-                    step={1}
-                    className="py-1"
-                  />
-                </div>
-              ))}
-
-              <Separator />
-
-              {/* No-Go Dealbreakers */}
-              <Collapsible open={dealbreakersOpen} onOpenChange={setDealbreakersOpen}>
-                <CollapsibleTrigger className="flex items-center gap-2 w-full text-left hover:text-foreground/80 transition-colors">
-                  <span className="text-base font-semibold">🚫 Absolute Dealbreakers</span>
-                  <span className="text-xs text-muted-foreground">
-                    ({dealbreakersOpen ? "−" : "+"} optional filters)
-                  </span>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-4 mt-4">
-                  <p className="text-xs text-muted-foreground">
-                    Properties that violate any of these will be flagged as eliminated
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* No HOA */}
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={noGoFilters.noHoa}
-                        onChange={(e) =>
-                          setNoGoFilters((prev) => ({ ...prev, noHoa: e.target.checked }))
-                        }
-                        className="h-4 w-4 rounded border-muted-foreground/30 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm">No HOA</span>
-                    </label>
-
-                    {/* No off-street parking */}
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={noGoFilters.noOffStreetParking}
-                        onChange={(e) =>
-                          setNoGoFilters((prev) => ({
-                            ...prev,
-                            noOffStreetParking: e.target.checked,
-                          }))
-                        }
-                        className="h-4 w-4 rounded border-muted-foreground/30 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm">Must have off-street parking</span>
-                    </label>
-
-                    {/* Single story only */}
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={noGoFilters.singleStoryOnly}
-                        onChange={(e) =>
-                          setNoGoFilters((prev) => ({
-                            ...prev,
-                            singleStoryOnly: e.target.checked,
-                          }))
-                        }
-                        className="h-4 w-4 rounded border-muted-foreground/30 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm">Single-story only</span>
-                    </label>
-
-                    {/* No major issues */}
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={noGoFilters.noMajorIssues}
-                        onChange={(e) =>
-                          setNoGoFilters((prev) => ({
-                            ...prev,
-                            noMajorIssues: e.target.checked,
-                          }))
-                        }
-                        className="h-4 w-4 rounded border-muted-foreground/30 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm">No major issues (foundation, water damage, mold)</span>
-                    </label>
-                  </div>
-
-                  {/* Numeric thresholds */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="min-beds" className="text-xs">Min Bedrooms</Label>
-                      <Input
-                        id="min-beds"
-                        type="number"
-                        min={0}
-                        max={10}
-                        placeholder="Any"
-                        value={noGoFilters.minBeds ?? ""}
-                        onChange={(e) =>
-                          setNoGoFilters((prev) => ({
-                            ...prev,
-                            minBeds: e.target.value ? Number(e.target.value) : null,
-                          }))
-                        }
-                        className="h-9"
-                      />
-                    </div>
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="min-baths" className="text-xs">Min Bathrooms</Label>
-                      <Input
-                        id="min-baths"
-                        type="number"
-                        min={0}
-                        max={10}
-                        placeholder="Any"
-                        value={noGoFilters.minBaths ?? ""}
-                        onChange={(e) =>
-                          setNoGoFilters((prev) => ({
-                            ...prev,
-                            minBaths: e.target.value ? Number(e.target.value) : null,
-                          }))
-                        }
-                        className="h-9"
-                      />
-                    </div>
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="max-hoa" className="text-xs">Max HOA/mo ($)</Label>
-                      <Input
-                        id="max-hoa"
-                        type="number"
-                        min={0}
-                        step={50}
-                        placeholder="Any"
-                        value={noGoFilters.maxHoaMonthly ?? ""}
-                        onChange={(e) =>
-                          setNoGoFilters((prev) => ({
-                            ...prev,
-                            maxHoaMonthly: e.target.value ? Number(e.target.value) : null,
-                          }))
-                        }
-                        className="h-9"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="grid gap-1.5">
-                      <Label htmlFor="min-sqft" className="text-xs">Min Square Footage</Label>
-                      <Input
-                        id="min-sqft"
-                        type="number"
-                        min={0}
-                        step={100}
-                        placeholder="Any"
-                        value={noGoFilters.minSqft ?? ""}
-                        onChange={(e) =>
-                          setNoGoFilters((prev) => ({
-                            ...prev,
-                            minSqft: e.target.value ? Number(e.target.value) : null,
-                          }))
-                        }
-                        className="h-9"
-                      />
-                    </div>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-
-              <div className="flex justify-end">
-                <Button onClick={() => setStep(1)} className="w-full sm:w-auto">
-                  Next →
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Slide 2: Financial Profile */}
-        {!showProgress && step === 1 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Step 2: Your Financial Profile</CardTitle>
-              <CardDescription>
-                Required — helps the AI assess affordability, commute, and total cost of ownership.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="income">Annual Income ($)</Label>
-                  <Input
-                    id="income"
-                    type="number"
-                    min={0}
-                    step={1000}
-                    placeholder="e.g. 85000"
-                    value={userProfile.income || ""}
-                    onChange={(e) =>
-                      setUserProfile((prev) => ({
-                        ...prev,
-                        income: e.target.value ? Number(e.target.value) : 0,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="credit-score">Credit Score (300–850)</Label>
-                  <Input
-                    id="credit-score"
-                    type="number"
-                    min={300}
-                    max={850}
-                    placeholder="e.g. 720"
-                    value={userProfile.creditScore || ""}
-                    onChange={(e) =>
-                      setUserProfile((prev) => ({
-                        ...prev,
-                        creditScore: e.target.value ? Number(e.target.value) : 0,
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Work Address for Commute */}
-              <div className="grid gap-2">
-                <Label htmlFor="work-address">Work Address (for commute consideration)</Label>
-                <Input
-                  id="work-address"
-                  type="text"
-                  placeholder="e.g. 456 Office Blvd, Austin, TX"
-                  value={userProfile.workAddress || ""}
-                  onChange={(e) =>
-                    setUserProfile((prev) => ({
-                      ...prev,
-                      workAddress: e.target.value || undefined,
-                    }))
-                  }
-                />
-              </div>
-
-              <Separator />
-
-              {/* Renovation Budget */}
-              <div>
-                <h3 className="text-sm font-semibold mb-3">🔧 True Cost Estimate (Optional)</h3>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Estimate your first-year total cost including repairs and renovations
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="immediate-repairs" className="text-xs">Immediate Repairs ($)</Label>
-                    <Input
-                      id="immediate-repairs"
-                      type="number"
-                      min={0}
-                      step={500}
-                      placeholder="e.g. 5000 (roof, HVAC)"
-                      value={userProfile.renovationBudget?.immediateRepairs || ""}
-                      onChange={(e) =>
-                        setUserProfile((prev) => ({
-                          ...prev,
-                          renovationBudget: {
-                            immediateRepairs: e.target.value ? Number(e.target.value) : 0,
-                            desiredRenovations: prev.renovationBudget?.desiredRenovations ?? 0,
-                            annualMaintenancePercent: prev.renovationBudget?.annualMaintenancePercent ?? 0.01,
-                          },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="desired-renovations" className="text-xs">Desired Renovations ($)</Label>
-                    <Input
-                      id="desired-renovations"
-                      type="number"
-                      min={0}
-                      step={500}
-                      placeholder="e.g. 15000 (kitchen, floors)"
-                      value={userProfile.renovationBudget?.desiredRenovations || ""}
-                      onChange={(e) =>
-                        setUserProfile((prev) => ({
-                          ...prev,
-                          renovationBudget: {
-                            immediateRepairs: prev.renovationBudget?.immediateRepairs ?? 0,
-                            desiredRenovations: e.target.value ? Number(e.target.value) : 0,
-                            annualMaintenancePercent: prev.renovationBudget?.annualMaintenancePercent ?? 0.01,
-                          },
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-                <div className="mt-2">
-                  <Label className="text-xs">
-                    Annual Maintenance Rate: ~{((userProfile.renovationBudget?.annualMaintenancePercent ?? 0.01) * 100).toFixed(1)}% of home value
-                  </Label>
-                  <Slider
-                    value={[(userProfile.renovationBudget?.annualMaintenancePercent ?? 0.01) * 100]}
-                    onValueChange={([val]) =>
-                      setUserProfile((prev) => ({
-                        ...prev,
-                        renovationBudget: {
-                          immediateRepairs: prev.renovationBudget?.immediateRepairs ?? 0,
-                          desiredRenovations: prev.renovationBudget?.desiredRenovations ?? 0,
-                          annualMaintenancePercent: val / 100,
-                        },
-                      }))
-                    }
-                    min={0.5}
-                    max={3}
-                    step={0.1}
-                    className="py-1"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-between pt-4 gap-3">
-                <Button variant="outline" onClick={() => setStep(0)} className="w-full sm:w-auto">
-                  ← Back
-                </Button>
-                <Button onClick={() => setStep(2)} className="w-full sm:w-auto">Next →</Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Slide 3: Property Addresses */}
-        {!showProgress && step === 2 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Step 3: Enter Property Addresses</CardTitle>
-              <CardDescription>
-                Enter 2–3 US property addresses to compare
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {addresses.map((addr, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input
-                    placeholder={`Address ${i + 1} (e.g. 123 Main St, Austin, TX)`}
-                    value={addr}
-                    onChange={(e) => {
-                      const updated = [...addresses];
-                      updated[i] = e.target.value;
-                      setAddresses(updated);
-                    }}
-                    disabled={loading}
-                  />
-                  {addresses.length > 1 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setAddresses((prev) => prev.filter((_, j) => j !== i));
-                      }}
-                      disabled={loading}
-                      aria-label={`Remove address ${i + 1}`}
-                    >
-                      ✕
-                    </Button>
-                  )}
-                </div>
-              ))}
-
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-between pt-4 gap-3">
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setStep(1)} className="w-full sm:w-auto">
-                    ← Back
-                  </Button>
-                  {addresses.length < 3 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setAddresses((prev) => [...prev, ""])}
-                      disabled={loading}
-                      className="w-full sm:w-auto"
-                    >
-                      + Add Address
-                    </Button>
-                  )}
-                </div>
-                <Button
-                  onClick={handleCompare}
-                  disabled={loading || addresses.filter((a) => a.trim()).length < 2}
-                  className="w-full sm:w-auto"
-                >
-                  {loading ? "Comparing..." : "Compare Properties"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-            <p className="text-xs sm:text-sm text-destructive">{error}</p>
-          </div>
-        )}
-
-        {/* Footer */}
-        <p className="mt-8 text-center text-[11px] sm:text-xs text-muted-foreground px-2">
+      {/* Footer */}
+      <footer className="py-8 text-center">
+        <p className="text-[11px] sm:text-xs text-muted-foreground px-4 max-w-2xl mx-auto">
           Data sourced from publicly available real estate listings. For informational purposes only — not affiliated with any listing provider. Verify all details with a licensed agent before making decisions.
         </p>
-      </div>
+      </footer>
     </main>
   );
 }

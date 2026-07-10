@@ -1,709 +1,667 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import Image from "next/image";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import { useRouter } from "next/navigation";
-import CompareTable from "@/components/CompareTable";
-import AiSummary from "@/components/AiSummary";
-import BigTicketPanel from "@/components/BigTicketPanel";
-import { House, Weights, CompareResponse, UserProfile } from "@/lib/types";
-import { calculateMortgage, normalizeTaxRate } from "@/lib/mortgage";
+import { Weights, UserProfile, NoGoFilters, DEFAULT_NO_GO } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Download } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import ProgressPanel from "@/components/ProgressPanel";
 
-export default function ComparePage() {
+const DEFAULT_WEIGHTS: Weights = {
+  price: 5,
+  schools: 4,
+  size: 3,
+  lotSize: 2,
+  taxes: 3,
+};
+
+const CRITERIA = [
+  { key: "price", label: "💰 Price", desc: "Lower is better", default: 5 },
+  { key: "schools", label: "🏫 Schools", desc: "School quality", default: 4 },
+  { key: "size", label: "📐 Size", desc: "Square footage", default: 3 },
+  { key: "lotSize", label: "🏡 Lot Size", desc: "Land area", default: 2 },
+  { key: "taxes", label: "🏛️ Taxes", desc: "Property tax rate", default: 3 },
+  { key: "bigTicketRisk", label: "🔧 Big Repairs", desc: "Estimated upcoming roof/HVAC costs", default: 4 },
+] as const;
+
+const STEPS = ["Priorities", "Financial Profile", "Property Addresses"];
+
+export default function CompareWizardPage() {
   const router = useRouter();
-  const [data, setData] = useState<CompareResponse | null>(null);
-  const [weights, setWeights] = useState<Weights>({});
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [noGoViolations, setNoGoViolations] = useState<Record<string, string[]>>({});
-  const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState(0);
+  const [weights, setWeights] = useState<Weights>(DEFAULT_WEIGHTS);
+  const [addresses, setAddresses] = useState<string[]>(["", "", ""]);
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    income: 0,
+    creditScore: 0,
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [noGoFilters, setNoGoFilters] = useState<NoGoFilters>(DEFAULT_NO_GO);
+  const [dealbreakersOpen, setDealbreakersOpen] = useState(false);
+  const [showProgress, setShowProgress] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    const stored = sessionStorage.getItem("compareResult");
-    const storedWeights = sessionStorage.getItem("compareWeights");
-    const storedProfile = sessionStorage.getItem("compareUserProfile");
+  const dispatchProgress = (stage: string, message: string, progress: number) => {
+    window.dispatchEvent(
+      new CustomEvent("compare-progress", {
+        detail: { stage, message, progress },
+      })
+    );
+  };
 
-    if (!stored) {
-      router.push("/");
-      return;
-    }
+  const dispatchDone = () => {
+    window.dispatchEvent(new CustomEvent("compare-done"));
+  };
+
+  const handleCancel = useCallback(() => {
+    abortRef.current?.abort();
+    setShowProgress(false);
+    setLoading(false);
+    setError("Comparison cancelled");
+  }, []);
+
+  const handleCompare = async () => {
+    setLoading(true);
+    setError(null);
+    setShowProgress(true);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const parsed = JSON.parse(stored) as CompareResponse;
-      setData(parsed);
-      setWeights(storedWeights ? JSON.parse(storedWeights) : {});
-      if (storedProfile) {
-        setUserProfile(JSON.parse(storedProfile) as UserProfile);
+      const res = await fetch("/api/compare/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          addresses: addresses.filter((a) => a.trim()),
+          weights,
+          userProfile,
+          noGoFilters,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: "Failed to compare properties" }));
+        throw new Error(errData.error ?? "Failed to compare properties");
       }
-      if (parsed.noGoViolations) {
-        setNoGoViolations(parsed.noGoViolations);
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        throw new Error("No response stream available");
       }
-    } catch {
-      router.push("/");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalResult: Record<string, unknown> | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        let eventType = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            const dataStr = line.slice(6);
+            try {
+              const data = JSON.parse(dataStr);
+
+              if (eventType === "progress") {
+                dispatchProgress(data.stage, data.message, data.progress);
+              } else if (eventType === "done") {
+                finalResult = data;
+                const { skippedStages, ...result } = data;
+                dispatchDone();
+
+                sessionStorage.setItem("compareResult", JSON.stringify(result));
+                sessionStorage.setItem("compareWeights", JSON.stringify(weights));
+                sessionStorage.setItem("compareNoGoFilters", JSON.stringify(noGoFilters));
+                sessionStorage.setItem("compareUserProfile", JSON.stringify(userProfile));
+              } else if (eventType === "error") {
+                throw new Error(data.message ?? "An unexpected error occurred");
+              }
+            } catch (parseErr: any) {
+              if (parseErr?.message && !parseErr.message.includes("JSON")) {
+                throw parseErr;
+              }
+            }
+          }
+        }
+      }
+
+      if (finalResult) {
+        router.push("/compare/results");
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") return;
+      setError(err.message);
+      setShowProgress(false);
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  };
 
-  // Pre-calc mortgages for CSV export
-  const mortgages = useMemo(
-    () => (data ? data.houses.map((h) => calculateMortgage(h, userProfile)) : []),
-    [data, userProfile]
-  );
-
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading comparison data...</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (!data) {
-    return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="text-muted-foreground">No comparison data found.</p>
-          <Button onClick={() => router.push("/")}>
-            Start a new comparison
-          </Button>
-        </div>
-      </main>
-    );
-  }
+  const canProceed = () => {
+    switch (step) {
+      case 0:
+        return true; // weights always have defaults
+      case 1:
+        return userProfile.income > 0 && userProfile.creditScore >= 300; // financial profile is required
+      case 2:
+        return addresses.filter((a) => a.trim()).length >= 2;
+      default:
+        return false;
+    }
+  };
 
   return (
     <main className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-3">
-          <div className="flex items-center">
+        <div className="text-center mb-8 sm:mb-10">
+          <div className="flex justify-center mb-2">
             <Image
               src="/domuzz_logo.png"
-              alt="Domuzz - Property Comparison"
-              width={140}
-              height={32}
+              alt="Domuzz - House Compare Made Easy"
+              width={180}
+              height={41}
               priority
-              className="h-auto w-auto sm:w-[180px]"
+              className="h-auto w-auto sm:w-[260px]"
             />
           </div>
-          <Button
-            variant="link"
-            size="sm"
-            className="self-start sm:self-auto px-0 sm:px-3"
-            onClick={() => {
-              sessionStorage.removeItem("compareResult");
-              sessionStorage.removeItem("compareWeights");
-              sessionStorage.removeItem("compareUserProfile");
-              router.push("/");
-            }}
-          >
-            ← New Comparison
-          </Button>
+          <p className="text-muted-foreground text-sm sm:text-base">
+            Compare up to 3 properties side-by-side and export to CSV
+          </p>
         </div>
 
-        {/* Comparison Table */}
-        <Card className="mb-6 !overflow-visible">
-          <div className="p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <h2 className="text-sm font-medium text-foreground">Comparison Results</h2>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full sm:w-auto"
-              onClick={() => {
-                // ── Helpers matching CompareTable formatting ──
-                const csvQuote = (val: string) =>
-                  `"${val.replace(/"/g, '""')}"`;
-                const fmtCur = (v: number | null) =>
-                  v != null ? `$${v.toLocaleString()}` : "—";
-                const fmtPct = (v: number | null) =>
-                  v != null ? `${(v * 100).toFixed(2)}%` : "—";
-                const fmtBool = (v: boolean | null) =>
-                  v === null ? "—" : v ? "Yes" : "No";
-                const fmtSchools = (
-                  schools: { name: string; rating: number | null }[]
-                ) =>
-                  schools.length === 0
-                    ? "—"
-                    : schools
-                        .map(
-                          (s) =>
-                            `${s.name} (${s.rating != null ? s.rating + "/10" : "NR"})`
-                        )
-                        .join("\n");
+        {/* Step Indicator */}
+        <div className="flex items-center justify-center gap-1 sm:gap-2 mb-8">
+          {STEPS.map((s, i) => (
+            <div key={s} className="flex items-center gap-1 sm:gap-2">
+              <div
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-medium ${
+                  i <= step
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {i + 1}
+              </div>
+              <span
+                className={`text-xs sm:text-sm ${
+                  i === step ? "font-semibold text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                {s}
+              </span>
+              {i < STEPS.length - 1 && (
+                <div
+                  className={`w-4 sm:w-8 h-0.5 ${
+                    i < step ? "bg-primary" : "bg-muted"
+                  }`}
+                />
+              )}
+            </div>
+          ))}
+        </div>
 
-                // ── Weighted scores (matching CompareTable logic) ──
-                const buildCriteria = () => [
-                  {
-                    key: "price",
-                    extract: (h: House) => h.price,
-                    defaultMax: 1_500_000,
-                    higherBetter: false,
-                  },
-                  {
-                    key: "monthlyPayment",
-                    extract: (_h: House, m: ReturnType<typeof calculateMortgage> | null) =>
-                      m?.monthlyPayment ?? null,
-                    defaultMax: 10_000,
-                    higherBetter: false,
-                  },
-                  {
-                    key: "annualTax",
-                    extract: (_h: House, m: ReturnType<typeof calculateMortgage> | null) =>
-                      m?.annualTax ?? null,
-                    defaultMax: 20_000,
-                    higherBetter: false,
-                  },
-                  {
-                    key: "annualInsurance",
-                    extract: (_h: House, m: ReturnType<typeof calculateMortgage> | null) =>
-                      m?.annualInsurance ?? null,
-                    defaultMax: 5_000,
-                    higherBetter: false,
-                  },
-                  {
-                    key: "dtiRatio",
-                    extract: (_h: House, m: ReturnType<typeof calculateMortgage> | null) =>
-                      m?.dtiRatio != null ? m.dtiRatio * 100 : null,
-                    defaultMax: 50,
-                    higherBetter: false,
-                  },
-                  {
-                    key: "downPayment",
-                    extract: (_h: House, m: ReturnType<typeof calculateMortgage> | null) =>
-                      m?.cashNeeded.downPayment ?? null,
-                    defaultMax: 400_000,
-                    higherBetter: false,
-                  },
-                  {
-                    key: "schools",
-                    extract: (h: House) => {
-                      const ratings = h.schools
-                        .map((s) => s.rating)
-                        .filter((r) => r != null) as number[];
-                      return ratings.length > 0 ? Math.max(...ratings) : 0;
-                    },
-                    defaultMax: 10,
-                    higherBetter: true,
-                  },
-                  {
-                    key: "size",
-                    extract: (h: House) => h.sqft,
-                    defaultMax: 5_000,
-                    higherBetter: true,
-                  },
-                  {
-                    key: "taxes",
-                    extract: (h: House) => normalizeTaxRate(h.propertyTaxRate),
-                    defaultMax: 0.03,
-                    higherBetter: false,
-                  },
-                  {
-                    key: "yearBuilt",
-                    extract: (h: House) => h.yearBuilt,
-                    defaultMax: new Date().getFullYear(),
-                    higherBetter: true,
-                  },
-                  {
-                    key: "lotSize",
-                    extract: (h: House) => {
-                      if (!h.lotSize) return null;
-                      const acresMatch = h.lotSize.match(/([\d.]+)\s*acres?/i);
-                      if (acresMatch)
-                        return parseFloat(acresMatch[1]) * 43560;
-                      const sqftMatch = h.lotSize.match(/([\d,]+)\s*sq\s*ft/i);
-                      if (sqftMatch)
-                        return parseFloat(sqftMatch[1].replace(/,/g, ""));
-                      return null;
-                    },
-                    defaultMax: 43_560,
-                    higherBetter: true,
-                  },
-                  {
-                    key: "hoa",
-                    extract: (h: House) => h.hoaMonthly,
-                    defaultMax: 500,
-                    higherBetter: false,
-                  },
-                  {
-                    key: "pricePerSqft",
-                    extract: (h: House) => h.pricePerSqft,
-                    defaultMax: 500,
-                    higherBetter: false,
-                  },
-                  {
-                    key: "daysOnZillow",
-                    extract: (h: House) => h.daysOnZillow,
-                    defaultMax: 365,
-                    higherBetter: false,
-                  },
-                  {
-                    key: "beds",
-                    extract: (h: House) => h.beds,
-                    defaultMax: 6,
-                    higherBetter: true,
-                  },
-                  {
-                    key: "baths",
-                    extract: (h: House) => h.baths,
-                    defaultMax: 5,
-                    higherBetter: true,
-                  },
-                  {
-                    key: "garage",
-                    extract: (h: House) => h.garage,
-                    defaultMax: 4,
-                    higherBetter: true,
-                  },
-                  {
-                    key: "stories",
-                    extract: (h: House) => h.stories,
-                    defaultMax: 3,
-                    higherBetter: true,
-                  },
-                  {
-                    key: "bigTicketRisk",
-                    extract: (h: House) => h.systemAges?.totalEstimatedBigRepairs ?? null,
-                    defaultMax: 30000,
-                    higherBetter: false,
-                  },
-                ];
+        {/* Progress Panel (shown during comparison) */}
+        {showProgress && (
+          <ProgressPanel onCancel={handleCancel} />
+        )}
 
-                const criteria = buildCriteria();
-                const scores = data.houses.map((h, i) => {
-                  let totalW = 0;
-                  let totalS = 0;
-                  for (const c of criteria) {
-                    const w = weights[c.key] ?? 3;
-                    if (w <= 0) continue;
-                    const val = c.extract(h, mortgages[i]);
-                    if (val == null || isNaN(val)) continue;
-                    let norm = Math.min(val / c.defaultMax, 1);
-                    if (!c.higherBetter) norm = 1 - norm;
-                    norm = Math.max(norm, 0);
-                    totalS += norm * w;
-                    totalW += w;
+        {/* Slide 1: Priorities & Dealbreakers */}
+        {!showProgress && step === 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Step 1: Set Your Priorities</CardTitle>
+              <CardDescription>
+                Drag each slider to weight what matters most (1 = least, 5 = most important)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {CRITERIA.map(({ key, label, desc, default: def }) => (
+                <div key={key} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base">{label}</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                    </div>
+                    <Badge variant="secondary" className="font-mono text-xs">
+                      {weights[key] ?? def}/5
+                    </Badge>
+                  </div>
+                  <Slider
+                    value={[weights[key] ?? def]}
+                    onValueChange={([val]) =>
+                      setWeights((prev) => ({ ...prev, [key]: val }))
+                    }
+                    min={1}
+                    max={5}
+                    step={1}
+                    className="py-1"
+                  />
+                </div>
+              ))}
+
+              <Separator />
+
+              {/* No-Go Dealbreakers */}
+              <Collapsible open={dealbreakersOpen} onOpenChange={setDealbreakersOpen}>
+                <CollapsibleTrigger className="flex items-center gap-2 w-full text-left hover:text-foreground/80 transition-colors">
+                  <span className="text-base font-semibold">🚫 Absolute Dealbreakers</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({dealbreakersOpen ? "−" : "+"} optional filters)
+                  </span>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 mt-4">
+                  <p className="text-xs text-muted-foreground">
+                    Properties that violate any of these will be flagged as eliminated
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* No HOA */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={noGoFilters.noHoa}
+                        onChange={(e) =>
+                          setNoGoFilters((prev) => ({ ...prev, noHoa: e.target.checked }))
+                        }
+                        className="h-4 w-4 rounded border-muted-foreground/30 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">No HOA</span>
+                    </label>
+
+                    {/* No off-street parking */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={noGoFilters.noOffStreetParking}
+                        onChange={(e) =>
+                          setNoGoFilters((prev) => ({
+                            ...prev,
+                            noOffStreetParking: e.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-muted-foreground/30 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">Must have off-street parking</span>
+                    </label>
+
+                    {/* Single story only */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={noGoFilters.singleStoryOnly}
+                        onChange={(e) =>
+                          setNoGoFilters((prev) => ({
+                            ...prev,
+                            singleStoryOnly: e.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-muted-foreground/30 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">Single-story only</span>
+                    </label>
+
+                    {/* No major issues */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={noGoFilters.noMajorIssues}
+                        onChange={(e) =>
+                          setNoGoFilters((prev) => ({
+                            ...prev,
+                            noMajorIssues: e.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-muted-foreground/30 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">No major issues (foundation, water damage, mold)</span>
+                    </label>
+                  </div>
+
+                  {/* Numeric thresholds */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="min-beds" className="text-xs">Min Bedrooms</Label>
+                      <Input
+                        id="min-beds"
+                        type="number"
+                        min={0}
+                        max={10}
+                        placeholder="Any"
+                        value={noGoFilters.minBeds ?? ""}
+                        onChange={(e) =>
+                          setNoGoFilters((prev) => ({
+                            ...prev,
+                            minBeds: e.target.value ? Number(e.target.value) : null,
+                          }))
+                        }
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="min-baths" className="text-xs">Min Bathrooms</Label>
+                      <Input
+                        id="min-baths"
+                        type="number"
+                        min={0}
+                        max={10}
+                        placeholder="Any"
+                        value={noGoFilters.minBaths ?? ""}
+                        onChange={(e) =>
+                          setNoGoFilters((prev) => ({
+                            ...prev,
+                            minBaths: e.target.value ? Number(e.target.value) : null,
+                          }))
+                        }
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="max-hoa" className="text-xs">Max HOA/mo ($)</Label>
+                      <Input
+                        id="max-hoa"
+                        type="number"
+                        min={0}
+                        step={50}
+                        placeholder="Any"
+                        value={noGoFilters.maxHoaMonthly ?? ""}
+                        onChange={(e) =>
+                          setNoGoFilters((prev) => ({
+                            ...prev,
+                            maxHoaMonthly: e.target.value ? Number(e.target.value) : null,
+                          }))
+                        }
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="min-sqft" className="text-xs">Min Square Footage</Label>
+                      <Input
+                        id="min-sqft"
+                        type="number"
+                        min={0}
+                        step={100}
+                        placeholder="Any"
+                        value={noGoFilters.minSqft ?? ""}
+                        onChange={(e) =>
+                          setNoGoFilters((prev) => ({
+                            ...prev,
+                            minSqft: e.target.value ? Number(e.target.value) : null,
+                          }))
+                        }
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <div className="flex justify-end">
+                <Button onClick={() => setStep(1)} className="w-full sm:w-auto">
+                  Next →
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Slide 2: Financial Profile */}
+        {!showProgress && step === 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Step 2: Your Financial Profile</CardTitle>
+              <CardDescription>
+                Required — helps the AI assess affordability, commute, and total cost of ownership.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="income">Annual Income ($)</Label>
+                  <Input
+                    id="income"
+                    type="number"
+                    min={0}
+                    step={1000}
+                    placeholder="e.g. 85000"
+                    value={userProfile.income || ""}
+                    onChange={(e) =>
+                      setUserProfile((prev) => ({
+                        ...prev,
+                        income: e.target.value ? Number(e.target.value) : 0,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="credit-score">Credit Score (300–850)</Label>
+                  <Input
+                    id="credit-score"
+                    type="number"
+                    min={300}
+                    max={850}
+                    placeholder="e.g. 720"
+                    value={userProfile.creditScore || ""}
+                    onChange={(e) =>
+                      setUserProfile((prev) => ({
+                        ...prev,
+                        creditScore: e.target.value ? Number(e.target.value) : 0,
+                      }))
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Work Address for Commute */}
+              <div className="grid gap-2">
+                <Label htmlFor="work-address">Work Address (for commute consideration)</Label>
+                <Input
+                  id="work-address"
+                  type="text"
+                  placeholder="e.g. 456 Office Blvd, Austin, TX"
+                  value={userProfile.workAddress || ""}
+                  onChange={(e) =>
+                    setUserProfile((prev) => ({
+                      ...prev,
+                      workAddress: e.target.value || undefined,
+                    }))
                   }
-                  return totalW > 0 ? (totalS / totalW) * 10 : 0;
-                });
-                const bestScore = Math.max(...scores);
-                const worstScore =
-                  scores.length > 1 ? Math.min(...scores) : bestScore;
+                />
+              </div>
 
-                const houseAddrs = data.houses.map((h) => `"${h.address}"`);
+              <Separator />
 
-                // ── Build transposed CSV rows (fields as rows, houses as columns) ──
-                const csvRows: string[] = [];
+              {/* Renovation Budget */}
+              <div>
+                <h3 className="text-sm font-semibold mb-3">🔧 True Cost Estimate (Optional)</h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Estimate your first-year total cost including repairs and renovations
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="immediate-repairs" className="text-xs">Immediate Repairs ($)</Label>
+                    <Input
+                      id="immediate-repairs"
+                      type="number"
+                      min={0}
+                      step={500}
+                      placeholder="e.g. 5000 (roof, HVAC)"
+                      value={userProfile.renovationBudget?.immediateRepairs || ""}
+                      onChange={(e) =>
+                        setUserProfile((prev) => ({
+                          ...prev,
+                          renovationBudget: {
+                            immediateRepairs: e.target.value ? Number(e.target.value) : 0,
+                            desiredRenovations: prev.renovationBudget?.desiredRenovations ?? 0,
+                            annualMaintenancePercent: prev.renovationBudget?.annualMaintenancePercent ?? 0.01,
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="desired-renovations" className="text-xs">Desired Renovations ($)</Label>
+                    <Input
+                      id="desired-renovations"
+                      type="number"
+                      min={0}
+                      step={500}
+                      placeholder="e.g. 15000 (kitchen, floors)"
+                      value={userProfile.renovationBudget?.desiredRenovations || ""}
+                      onChange={(e) =>
+                        setUserProfile((prev) => ({
+                          ...prev,
+                          renovationBudget: {
+                            immediateRepairs: prev.renovationBudget?.immediateRepairs ?? 0,
+                            desiredRenovations: e.target.value ? Number(e.target.value) : 0,
+                            annualMaintenancePercent: prev.renovationBudget?.annualMaintenancePercent ?? 0.01,
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <Label className="text-xs">
+                    Annual Maintenance Rate: ~{((userProfile.renovationBudget?.annualMaintenancePercent ?? 0.01) * 100).toFixed(1)}% of home value
+                  </Label>
+                  <Slider
+                    value={[(userProfile.renovationBudget?.annualMaintenancePercent ?? 0.01) * 100]}
+                    onValueChange={([val]) =>
+                      setUserProfile((prev) => ({
+                        ...prev,
+                        renovationBudget: {
+                          immediateRepairs: prev.renovationBudget?.immediateRepairs ?? 0,
+                          desiredRenovations: prev.renovationBudget?.desiredRenovations ?? 0,
+                          annualMaintenancePercent: val / 100,
+                        },
+                      }))
+                    }
+                    min={0.5}
+                    max={3}
+                    step={0.1}
+                    className="py-1"
+                  />
+                </div>
+              </div>
 
-                // Header row: Field, House1, House2, ...
-                csvRows.push(["Field", ...houseAddrs].join(","));
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-between pt-4 gap-3">
+                <Button variant="outline" onClick={() => setStep(0)} className="w-full sm:w-auto">
+                  ← Back
+                </Button>
+                <Button onClick={() => setStep(2)} className="w-full sm:w-auto">Next →</Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-                // Section helper
-                const pushSection = (label: string) => {
-                  csvRows.push(
-                    [`"${label}"`, ...houseAddrs.map(() => "")].join(",")
-                  );
-                };
+        {/* Slide 3: Property Addresses */}
+        {!showProgress && step === 2 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Step 3: Enter Property Addresses</CardTitle>
+              <CardDescription>
+                Enter 2–3 US property addresses to compare
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {addresses.map((addr, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    placeholder={`Address ${i + 1} (e.g. 123 Main St, Austin, TX)`}
+                    value={addr}
+                    onChange={(e) => {
+                      const updated = [...addresses];
+                      updated[i] = e.target.value;
+                      setAddresses(updated);
+                    }}
+                    disabled={loading}
+                  />
+                  {addresses.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setAddresses((prev) => prev.filter((_, j) => j !== i));
+                      }}
+                      disabled={loading}
+                      aria-label={`Remove address ${i + 1}`}
+                    >
+                      ✕
+                    </Button>
+                  )}
+                </div>
+              ))}
 
-                // Photo row
-                csvRows.push(
-                  [
-                    "Photo",
-                    ...data.houses.map((h) => `"${h.photo ?? "—"}"`),
-                  ].join(",")
-                );
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-between pt-4 gap-3">
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setStep(1)} className="w-full sm:w-auto">
+                    ← Back
+                  </Button>
+                  {addresses.length < 3 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAddresses((prev) => [...prev, ""])}
+                      disabled={loading}
+                      className="w-full sm:w-auto"
+                    >
+                      + Add Address
+                    </Button>
+                  )}
+                </div>
+                <Button
+                  onClick={handleCompare}
+                  disabled={loading || addresses.filter((a) => a.trim()).length < 2}
+                  className="w-full sm:w-auto"
+                >
+                  {loading ? "Comparing..." : "Compare Properties"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-                // ── Overview ──
-                pushSection("--- Overview ---");
-                csvRows.push(
-                  [
-                    "Home Type",
-                    ...data.houses.map((h) => csvQuote(h.homeType ?? "—")),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Status",
-                    ...data.houses.map((h) => csvQuote(h.status ?? "—")),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Price",
-                    ...data.houses.map((h) => csvQuote(fmtCur(h.price))),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Est. Monthly Payment",
-                    ...data.houses.map((_, i) =>
-                      csvQuote(fmtCur(mortgages[i]?.monthlyPayment ?? null))
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Est. Annual Tax",
-                    ...data.houses.map((_, i) =>
-                      csvQuote(fmtCur(mortgages[i]?.annualTax ?? null))
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Est. Annual Insurance",
-                    ...data.houses.map((_, i) =>
-                      csvQuote(fmtCur(mortgages[i]?.annualInsurance ?? null))
-                    ),
-                  ].join(",")
-                );
-
-                // ── Affordability ──
-                pushSection("--- Affordability ---");
-                csvRows.push(
-                  [
-                    "Interest Rate",
-                    ...data.houses.map((_, i) =>
-                      csvQuote(mortgages[i]
-                        ? `${mortgages[i].interestRate.toFixed(2)}%`
-                        : "—")
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "DTI Ratio",
-                    ...data.houses.map((_, i) => {
-                      const d = mortgages[i]?.dtiRatio;
-                      return csvQuote(d != null ? `${(d * 100).toFixed(2)}%` : "—");
-                    }),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Down Payment",
-                    ...data.houses.map((_, i) =>
-                      csvQuote(fmtCur(mortgages[i]?.cashNeeded.downPayment ?? null))
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Cash Needed (incl. closing)",
-                    ...data.houses.map((_, i) =>
-                      csvQuote(fmtCur(mortgages[i]?.cashNeeded.total ?? null))
-                    ),
-                  ].join(",")
-                );
-
-                // ── Size & Layout ──
-                pushSection("--- Size & Layout ---");
-                csvRows.push(
-                  [
-                    "Beds",
-                    ...data.houses.map((h) => csvQuote(String(h.beds ?? "—"))),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Baths",
-                    ...data.houses.map((h) => csvQuote(String(h.baths ?? "—"))),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Sqft",
-                    ...data.houses.map((h) =>
-                      csvQuote(h.sqft != null ? String(h.sqft) : "—")
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Price/sqft",
-                    ...data.houses.map((h) =>
-                      csvQuote(h.pricePerSqft != null
-                        ? `$${h.pricePerSqft.toLocaleString()}`
-                        : "—")
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Lot Size",
-                    ...data.houses.map((h) =>
-                      csvQuote(h.lotSize ? h.lotSize : "—")
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Stories",
-                    ...data.houses.map((h) => csvQuote(String(h.stories ?? "—"))),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Year Built",
-                    ...data.houses.map((h) => csvQuote(String(h.yearBuilt ?? "—"))),
-                  ].join(",")
-                );
-
-                // ── Features ──
-                pushSection("--- Features ---");
-                csvRows.push(
-                  [
-                    "Garage",
-                    ...data.houses.map((h) => csvQuote(String(h.garage ?? "—"))),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Pool",
-                    ...data.houses.map((h) => csvQuote(fmtBool(h.hasPool))),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Fireplace",
-                    ...data.houses.map((h) => csvQuote(fmtBool(h.hasFireplace))),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Heating",
-                    ...data.houses.map((h) =>
-                      csvQuote(h.heating ? h.heating : "—")
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Cooling",
-                    ...data.houses.map((h) =>
-                      csvQuote(h.cooling ? h.cooling : "—")
-                    ),
-                  ].join(",")
-                );
-
-                // ── Costs ──
-                pushSection("--- Costs ---");
-                csvRows.push(
-                  [
-                    "HOA (Monthly)",
-                    ...data.houses.map((h) => csvQuote(fmtCur(h.hoaMonthly))),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Tax Rate",
-                    ...data.houses.map((h) =>
-                      csvQuote(fmtPct(normalizeTaxRate(h.propertyTaxRate)))
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Days on Zillow",
-                    ...data.houses.map((h) => csvQuote(String(h.daysOnZillow ?? "—"))),
-                  ].join(",")
-                );
-
-                // ── Schools ──
-                pushSection("--- Schools ---");
-                csvRows.push(
-                  [
-                    "Nearby Schools",
-                    ...data.houses.map((h) =>
-                      csvQuote(fmtSchools(h.schools))
-                    ),
-                  ].join(",")
-                );
-
-                // ── Weighted Score ──
-                csvRows.push(
-                  [
-                    "Weighted Score",
-                    ...scores.map((s) => csvQuote(`${s.toFixed(1)} / 10`)),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Score Breakdown",
-                    ...scores.map((s, i) =>
-                      csvQuote(s === bestScore
-                        ? "🏆 Best"
-                        : `${(
-                            ((s - bestScore) / bestScore) *
-                            100
-                          ).toFixed(0)}% below best`)
-                    ),
-                  ].join(",")
-                );
-
-                // ── First-Year Cost ──
-                if (mortgages.some((m) => m.firstYearCost)) {
-                  csvRows.push(
-                    [
-                      "Est. First-Year Cost",
-                      ...mortgages.map((m) =>
-                        m.firstYearCost?.totalFirstYear
-                      ? csvQuote(`$${m.firstYearCost.totalFirstYear.toLocaleString()}`)
-                      : "—"
-                      ),
-                    ].join(",")
-                  );
-                }
-
-                // ── Major Systems ──
-                pushSection("--- Major Systems ---");
-                csvRows.push(
-                  [
-                    "Big-Ticket Risk",
-                    ...data.houses.map((h) => csvQuote(h.systemAges?.bigTicketRisk ?? "—")),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Est. 5yr Big Repairs",
-                    ...data.houses.map((h) =>
-                      csvQuote(h.systemAges?.totalEstimatedBigRepairs
-                        ? `$${h.systemAges.totalEstimatedBigRepairs.toLocaleString()}`
-                        : "—")
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Roof Condition",
-                    ...data.houses.map((h) => csvQuote(h.systemAges?.roofCondition ?? "—")),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Roof Repl. Cost",
-                    ...data.houses.map((h) =>
-                      csvQuote(h.systemAges?.roofReplacementEstimate
-                        ? `$${h.systemAges.roofReplacementEstimate.toLocaleString()}`
-                        : "—")
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Roof Remaining Life",
-                    ...data.houses.map((h) => {
-                      const r = h.systemAges?.roofRemainingLife;
-                      if (r == null) return csvQuote("—");
-                      return csvQuote(r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`);
-                    }),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "HVAC Condition",
-                    ...data.houses.map((h) => csvQuote(h.systemAges?.hvacCondition ?? "—")),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "HVAC Repl. Cost",
-                    ...data.houses.map((h) =>
-                      csvQuote(h.systemAges?.hvacReplacementEstimate
-                        ? `$${h.systemAges.hvacReplacementEstimate.toLocaleString()}`
-                        : "—")
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "HVAC Remaining Life",
-                    ...data.houses.map((h) => {
-                      const r = h.systemAges?.hvacRemainingLife;
-                      if (r == null) return csvQuote("—");
-                      return csvQuote(r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`);
-                    }),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "Water Heater Condition",
-                    ...data.houses.map((h) => csvQuote(h.systemAges?.waterHeaterCondition ?? "—")),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "WH Repl. Cost",
-                    ...data.houses.map((h) =>
-                      csvQuote(h.systemAges?.waterHeaterReplacementEstimate
-                        ? `$${h.systemAges.waterHeaterReplacementEstimate.toLocaleString()}`
-                        : "—")
-                    ),
-                  ].join(",")
-                );
-                csvRows.push(
-                  [
-                    "WH Remaining Life",
-                    ...data.houses.map((h) => {
-                      const r = h.systemAges?.waterHeaterRemainingLife;
-                      if (r == null) return csvQuote("—");
-                      return csvQuote(r < 0 ? `${Math.abs(r)}yr past` : `${r}yr`);
-                    }),
-                  ].join(",")
-                );
-
-                // ── Dealbreakers ──
-                if (
-                  noGoViolations &&
-                  Object.keys(noGoViolations).length > 0
-                ) {
-                  csvRows.push(
-                    [
-                      "Dealbreakers (🚫)",
-                      ...data.houses.map((h) => {
-                        const v = noGoViolations[h.address];
-                        return v && v.length > 0
-                          ? csvQuote(v.join("; "))
-                          : "—";
-                      }),
-                    ].join(",")
-                  );
-                }
-
-                const csv = csvRows.join("\n");
-                const blob = new Blob([csv], { type: "text/csv" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "house-comparison.csv";
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
-            >
-              <Download className="h-3.5 w-3.5 mr-1" />
-              Export CSV
-            </Button>
+        {/* Error */}
+        {error && (
+          <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <p className="text-xs sm:text-sm text-destructive">{error}</p>
           </div>
-          <CompareTable
-            houses={data.houses}
-            weights={weights}
-            userProfile={userProfile}
-            noGoViolations={noGoViolations}
-          />
-        </Card>
+        )}
 
-        {/* Big-Ticket System Estimates */}
-        <div className="mb-6">
-          <BigTicketPanel houses={data.houses} />
-        </div>
-
-        {/* AI Summary */}
-        <AiSummary result={data.aiResult} />
+        {/* Footer */}
+        <p className="mt-8 text-center text-[11px] sm:text-xs text-muted-foreground px-2">
+          Data sourced from publicly available real estate listings. For informational purposes only — not affiliated with any listing provider. Verify all details with a licensed agent before making decisions.
+        </p>
       </div>
     </main>
   );
