@@ -56,14 +56,14 @@ export default function HomePage() {
             <Image
               src="/domuzz_logo.png"
               alt="Domuzz"
-              width={220}
-              height={50}
+              width={180}
+              height={41}
               priority
               className="h-auto w-auto sm:w-[320px]"
             />
           </div>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
-            Free real estate tools for smarter home buying decisions. No sign-up, no paywall — just honest data.
+            Free real estate tools for smarter home buying or selling decisions. No sign-up, no paywall — just honest data.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button asChild size="lg" className="w-full sm:w-auto">
@@ -75,7 +75,7 @@ export default function HomePage() {
             <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
               <Link href="/cma">
                 <FileText className="h-4 w-4 mr-2" />
-                Run a CMA
+                Run a Free CMA Report
               </Link>
             </Button>
           </div>
