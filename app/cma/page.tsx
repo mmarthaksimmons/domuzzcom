@@ -110,7 +110,7 @@ export default function CmaPage() {
                 autoComplete="street-address"
               />
               <Button type="submit" disabled={loading || !address.trim()}>
-                {loading ? "Generating..." : "Generate Free CMA Report"}
+                {loading ? "Generating..." : "Get CMA Report"}
               </Button>
             </form>
           </CardContent>
