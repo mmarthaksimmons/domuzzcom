@@ -54,7 +54,7 @@ export default function HomePage() {
         <div className="max-w-4xl mx-auto px-4 py-16 sm:py-24 text-center">
           <div className="flex justify-center mb-6">
             <Image
-              src="/domuzz_logo.png"
+              src="/domuzz_logo.svg"
               alt="Domuzz"
               width={180}
               height={41}

@@ -84,7 +84,7 @@ export default function CompareResultsPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-3">
           <div className="flex items-center">
             <Image
-              src="/domuzz_logo.png"
+              src="/domuzz_logo.svg"
               alt="Domuzz - Property Comparison"
               width={140}
               height={32}

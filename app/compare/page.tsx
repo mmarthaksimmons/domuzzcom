@@ -179,7 +179,7 @@ export default function CompareWizardPage() {
         <div className="text-center mb-8 sm:mb-10">
           <div className="flex justify-center mb-2">
             <Image
-              src="/domuzz_logo.png"
+              src="/domuzz_logo.svg"
               alt="Domuzz - House Compare Made Easy"
               width={180}
               height={41}
