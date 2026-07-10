@@ -3,7 +3,7 @@ const ACTOR = "maxcopell~zillow-detail-scraper";
 
 /**
  * Scrape Zillow property details using addresses instead of URLs.
- *
+ * Use as below
  * Uses maxcopell~zillow-detail-scraper which accepts an "addresses" array
  * (e.g. ["123 Main St, City, State"]) and returns full listing data.
  * This avoids scraping Zillow property detail URLs to comply with Zillow ToS.
