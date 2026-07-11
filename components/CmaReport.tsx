@@ -65,11 +65,11 @@ export default function CmaReport({
         </CardHeader>
         <CardContent>
           {subjectProperty.photo && (
-            <div className="mb-4 rounded-lg overflow-hidden max-h-48">
+            <div className="mb-4 rounded-lg overflow-hidden max-h-96">
               <img
                 src={subjectProperty.photo}
                 alt={subjectProperty.address}
-                className="w-full h-48 object-cover"
+                className="w-full h-96 object-cover"
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
