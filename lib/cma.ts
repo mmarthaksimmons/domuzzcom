@@ -411,30 +411,22 @@ export function normalizeApifyCmaResponse(
     : (hdpHomeType ?? best.homeType ?? best.propertyType);
 
   // Extract photo URL from detail scraper data.
-  // Detail scraper stores photos in responsivePhotos/originalPhotos arrays
-  // with nested mixedSources.jpeg[].url
+  // Only use Zillow-hosted photos (photos.zillowstatic.com), never
+  // Google Street View maps URLs which may be blocked or show errors.
   let subjectPhoto: string | null = null;
   if (isDetailSubject) {
-    // Try nested Zillow photo URLs first (not street view)
-    const rp = best.responsivePhotos;
-    const op = best.originalPhotos;
-    if (Array.isArray(rp) && rp.length > 0) {
-      subjectPhoto =
-        rp[0]?.mixedSources?.jpeg?.[0]?.url ??
-        rp[0]?.url ??
-        null;
-    }
-    if (!subjectPhoto && Array.isArray(op) && op.length > 0) {
-      subjectPhoto =
-        op[0]?.mixedSources?.jpeg?.[0]?.url ??
-        op[0]?.url ??
-        null;
-    }
-    // Fallback: extract any photos.zillowstatic.com URL from raw JSON
-    if (!subjectPhoto) {
-      const raw = JSON.stringify(best);
-      const match = raw.match(/https?:\/\/photos\.zillowstatic\.com\/[^"]+/);
-      if (match) subjectPhoto = match[0];
+    // Extract all photos.zillowstatic.com URLs from the raw JSON —
+    // these are actual property photos, not Street View placeholders
+    const raw = JSON.stringify(best);
+    const matches = raw.match(/https?:\/\/photos\.zillowstatic\.com\/[^"\\]+/g);
+    if (matches && matches.length > 0) {
+      // Use the largest available photo (sorted by resolution suffix)
+      // Suffixes: cc_ft_1536 > cc_ft_1152 > cc_ft_960 > cc_ft_768 > cc_ft_576 > cc_ft_384 > cc_ft_192
+      const preferred = matches.find((u) => u.includes("cc_ft_1536"))
+        ?? matches.find((u) => u.includes("cc_ft_1152"))
+        ?? matches.find((u) => u.includes("cc_ft_960"))
+        ?? matches[0];
+      subjectPhoto = preferred;
     }
   } else {
     subjectPhoto = best.imgSrc ?? best.hdpData?.homeInfo?.photo ?? null;
@@ -487,136 +479,57 @@ export function normalizeApifyCmaResponse(
     }
   }
 
-  // ---- Compute estimate from all comparables ----
-  // Blend median price with weighted price-per-sqft for size-adjusted value.
+  // ---- Score + filter BEFORE computing estimate ----
+  // Score every comparable against the subject property so outliers
+  // don't contaminate the estimate (e.g. $11M/30K sqft mansion).
   const allCompsUnsorted = [...soldComparables, ...activeComparables];
-  const compsWithSqft = allCompsUnsorted.filter(
-    (c) => c.price > 0 && c.sqft > 0
-  );
-
-  const allCompPrices = compsWithSqft
-    .map((c) => c.price)
-    .sort((a, b) => a - b);
-
-  let estimate: EstimateRange;
-
-  if (allCompPrices.length >= 3 && subjectSqft && subjectSqft > 0) {
-    const n = allCompPrices.length;
-
-    // Raw median price (simple benchmark)
-    const median =
-      n % 2 === 0
-        ? (allCompPrices[n / 2 - 1] + allCompPrices[n / 2]) / 2
-        : allCompPrices[Math.floor(n / 2)];
-
-    // Weighted price-per-sqft (size-adjusted value)
-    // Weight each comp by how close its sqft is to subject
-    const pricePerSqftEntries = compsWithSqft.map((c) => ({
-      ppsf: c.price / c.sqft,
-      weight: Math.max(
-        0.1,
-        1 - Math.abs(c.sqft - subjectSqft) / subjectSqft
-      ),
-    }));
-
-    const totalWeight = pricePerSqftEntries.reduce((s, e) => s + e.weight, 0);
-    const weightedPpsf =
-      pricePerSqftEntries.reduce((s, e) => s + e.ppsf * e.weight, 0) /
-      totalWeight;
-
-    const perSqftEstimate = weightedPpsf * subjectSqft;
-
-    // Blend: 60% per-sqft estimate + 40% median — gives size-adjusted
-    // value while anchoring to actual area pricing
-    const blended = perSqftEstimate * 0.6 + median * 0.4;
-
-    const low = allCompPrices[Math.floor(n * 0.1)];
-    const high = allCompPrices[Math.floor(n * 0.9)];
-
-    estimate = {
-      price: Math.round(blended),
-      priceRangeLow: Math.round(low),
-      priceRangeHigh: Math.round(high),
-    };
-  } else if (allCompPrices.length >= 3) {
-    // No subject sqft, fall back to pure median
-    const n = allCompPrices.length;
-    const median =
-      n % 2 === 0
-        ? (allCompPrices[n / 2 - 1] + allCompPrices[n / 2]) / 2
-        : allCompPrices[Math.floor(n / 2)];
-    estimate = {
-      price: Math.round(median),
-      priceRangeLow: Math.round(allCompPrices[Math.floor(n * 0.1)]),
-      priceRangeHigh: Math.round(allCompPrices[Math.floor(n * 0.9)]),
-    };
-  } else {
-    // 1-2 comps only
-    const avg =
-      allCompPrices.reduce((s, p) => s + p, 0) / allCompPrices.length;
-    estimate = {
-      price: Math.round(avg),
-      priceRangeLow: Math.round(avg * 0.85),
-      priceRangeHigh: Math.round(avg * 1.15),
-    };
-  }
-
-  // ---- Compute correlation scores based on similarity to subject ----
-  // Also compute median price of non-outlier comps for price-based filtering
-  // (allCompsUnsorted was already built above in the estimate section)
   const allPrices = allCompsUnsorted.map((c) => c.price).sort((a, b) => a - b);
-  const medianPrice =
+  const rawMedian =
     allPrices.length > 0
       ? allPrices[Math.floor(allPrices.length / 2)]
-      : estimate.price;
+      : 0;
 
   for (const comp of allCompsUnsorted) {
     let score = 1.0;
 
-    // Beds: -0.07 per bed difference
+    // Beds: -0.08 per bed difference
     if (subjectBeds && comp.beds) {
-      score -= Math.abs(comp.beds - subjectBeds) * 0.07;
+      score -= Math.abs(comp.beds - subjectBeds) * 0.08;
     }
 
-    // Baths: -0.05 per bath difference
+    // Baths: -0.06 per bath difference
     if (subjectBaths && comp.baths) {
-      score -= Math.abs(comp.baths - subjectBaths) * 0.05;
+      score -= Math.abs(comp.baths - subjectBaths) * 0.06;
     }
 
-    // Sqft: heavy penalty if >50% different, very heavy if >100%
+    // Sqft: progressive penalty
     if (subjectSqft && comp.sqft && subjectSqft > 0) {
       const sqftRatio = Math.abs(comp.sqft - subjectSqft) / subjectSqft;
-      if (sqftRatio > 1.0) {
-        score -= 0.5;
-      } else if (sqftRatio > 0.5) {
-        score -= 0.25;
-      } else {
-        score -= sqftRatio * 0.15;
-      }
+      if (sqftRatio > 2.0) score -= 0.6;
+      else if (sqftRatio > 1.0) score -= 0.35;
+      else if (sqftRatio > 0.5) score -= 0.2;
+      else score -= sqftRatio * 0.15;
     }
 
-    // Distance: -0.04 per mile
+    // Distance: -0.05 per mile
     if (comp.distance != null) {
-      score -= comp.distance * 0.04;
+      score -= comp.distance * 0.05;
     }
 
-    // Price divergence from median: heavy penalty for extreme outliers
-    if (medianPrice > 0 && comp.price > 0) {
-      const priceRatio = Math.abs(comp.price - medianPrice) / medianPrice;
-      if (priceRatio > 3.0) {
-        score -= 0.5; // extreme outlier like $11M in a $300K area
-      } else if (priceRatio > 1.0) {
-        score -= 0.2;
-      } else if (priceRatio > 0.5) {
-        score -= 0.1;
-      }
+    // Price outlier penalty
+    if (rawMedian > 0 && comp.price > 0) {
+      const priceRatio = Math.abs(comp.price - rawMedian) / rawMedian;
+      if (priceRatio > 5.0) score -= 0.6;
+      else if (priceRatio > 2.0) score -= 0.35;
+      else if (priceRatio > 1.0) score -= 0.15;
+      else if (priceRatio > 0.5) score -= 0.05;
     }
 
     comp.correlation = Math.max(0, Math.min(1, Math.round(score * 100) / 100));
   }
 
-  // Filter to top 20 comparables by correlation, min threshold 0.25
-  const MIN_CORRELATION = 0.25;
+  // Filter: only comps with correlation >= 0.35, top 20
+  const MIN_CORRELATION = 0.35;
   const MAX_COMPS = 20;
 
   const allCompsScored = allCompsUnsorted
@@ -624,31 +537,91 @@ export function normalizeApifyCmaResponse(
     .sort((a, b) => b.correlation - a.correlation)
     .slice(0, MAX_COMPS);
 
-  // Re-split into sold / active after filtering
   const filteredSold = allCompsScored.filter((c) => c.isSold);
   const filteredActive = allCompsScored.filter((c) => !c.isSold);
 
-  // Recompute estimate from filtered sold comparables
-  const filteredSoldPrices = filteredSold
+  // ---- Compute estimate from FILTERED comps only ----
+  const compsWithSqft = allCompsScored.filter(
+    (c) => c.price > 0 && c.sqft > 0
+  );
+
+  const filteredPrices = compsWithSqft
     .map((c) => c.price)
-    .filter((p) => p > 0)
     .sort((a, b) => a - b);
 
-  if (filteredSoldPrices.length >= 3) {
-    const n = filteredSoldPrices.length;
+  // Get Zestimate as sanity anchor (pulls estimate toward Zillow's own valuation)
+  const zestimateVal: number | null = best.zestimate ?? null;
+
+  let estimate: EstimateRange;
+
+  if (filteredPrices.length >= 4 && subjectSqft && subjectSqft > 0) {
+    const n = filteredPrices.length;
+
+    // Weighted price-per-sqft from top-matching comps
+    const ppsfEntries = compsWithSqft.map((c) => ({
+      ppsf: c.price / c.sqft,
+      weight: Math.max(0.1, 1 - Math.abs(c.sqft - subjectSqft) / subjectSqft),
+    }));
+    const totalWeight = ppsfEntries.reduce((s, e) => s + e.weight, 0);
+    const weightedPpsf =
+      ppsfEntries.reduce((s, e) => s + e.ppsf * e.weight, 0) / totalWeight;
+    const perSqftEstimate = weightedPpsf * subjectSqft;
+
+    // Median of filtered comps
     const median =
       n % 2 === 0
-        ? (filteredSoldPrices[n / 2 - 1] + filteredSoldPrices[n / 2]) / 2
-        : filteredSoldPrices[Math.floor(n / 2)];
-    const low = filteredSoldPrices[Math.floor(n * 0.1)];
-    const high = filteredSoldPrices[Math.floor(n * 0.9)];
+        ? (filteredPrices[n / 2 - 1] + filteredPrices[n / 2]) / 2
+        : filteredPrices[Math.floor(n / 2)];
+
+    // Blend: 50% per-sqft + 30% median + 20% Zestimate anchor
+    // (if Zestimate available, otherwise 60/40)
+    if (zestimateVal && zestimateVal > 0) {
+      const blended = perSqftEstimate * 0.5 + median * 0.3 + zestimateVal * 0.2;
+      estimate = {
+        price: Math.round(blended),
+        priceRangeLow: Math.round(filteredPrices[Math.floor(n * 0.1)]),
+        priceRangeHigh: Math.round(filteredPrices[Math.floor(n * 0.9)]),
+      };
+    } else {
+      const blended = perSqftEstimate * 0.6 + median * 0.4;
+      estimate = {
+        price: Math.round(blended),
+        priceRangeLow: Math.round(filteredPrices[Math.floor(n * 0.1)]),
+        priceRangeHigh: Math.round(filteredPrices[Math.floor(n * 0.9)]),
+      };
+    }
+  } else if (filteredPrices.length >= 3) {
+    // No subject sqft, use pure median
+    const n = filteredPrices.length;
+    const median =
+      n % 2 === 0
+        ? (filteredPrices[n / 2 - 1] + filteredPrices[n / 2]) / 2
+        : filteredPrices[Math.floor(n / 2)];
+
+    if (zestimateVal && zestimateVal > 0) {
+      const blended = median * 0.7 + zestimateVal * 0.3;
+      estimate = {
+        price: Math.round(blended),
+        priceRangeLow: Math.round(filteredPrices[Math.floor(n * 0.1)]),
+        priceRangeHigh: Math.round(filteredPrices[Math.floor(n * 0.9)]),
+      };
+    } else {
+      estimate = {
+        price: Math.round(median),
+        priceRangeLow: Math.round(filteredPrices[Math.floor(n * 0.1)]),
+        priceRangeHigh: Math.round(filteredPrices[Math.floor(n * 0.9)]),
+      };
+    }
+  } else {
+    // 1-2 comps only
+    const avg =
+      filteredPrices.reduce((s, p) => s + p, 0) / (filteredPrices.length || 1);
     estimate = {
-      price: Math.round(median),
-      priceRangeLow: Math.round(low),
-      priceRangeHigh: Math.round(high),
+      price: Math.round(avg),
+      priceRangeLow: Math.round(avg * 0.85),
+      priceRangeHigh: Math.round(avg * 1.15),
     };
   }
-  // (if <3 sold, keep the previously computed estimate)
 
   return {
     subjectProperty,

@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
   tdText: { fontSize: 7, color: "#374151" },
   colAddr: { flex: 2.5 },
   colType: { flex: 1 },
-  colStatus: { flex: 1 },
+  colStatus: { flex: 1.2 },
   colPrice: { flex: 1.2, textAlign: "right" },
   colBeds: { flex: 0.5, textAlign: "center" },
   colBaths: { flex: 0.5, textAlign: "center" },
@@ -56,8 +56,9 @@ const styles = StyleSheet.create({
   colMatch: { flex: 0.6, textAlign: "right" },
   disclaimer: { marginTop: 16, fontSize: 6, color: "#9ca3af", textAlign: "center", borderTop: "1px solid #e5e7eb", paddingTop: 10 },
   footer: { position: "absolute", bottom: 16, left: 36, right: 36, fontSize: 6, color: "#9ca3af", textAlign: "center" },
-  soldBadge: { backgroundColor: "#f3f4f6", color: "#374151", fontSize: 6, paddingHorizontal: 3, paddingVertical: 1, borderRadius: 2 },
-  activeBadge: { backgroundColor: "#fef9c3", color: "#854d0e", fontSize: 6, paddingHorizontal: 3, paddingVertical: 1, borderRadius: 2 },
+  soldBadge: { backgroundColor: "#fef2f2", color: "#dc2626", fontSize: 6, paddingHorizontal: 3, paddingVertical: 1, borderRadius: 2 },
+  activeBadge: { backgroundColor: "#f0fdf4", color: "#16a34a", fontSize: 6, paddingHorizontal: 3, paddingVertical: 1, borderRadius: 2 },
+  photo: { width: "100%", height: 120, borderRadius: 4, marginBottom: 8, objectFit: "cover" },
   analysisText: { fontSize: 8, color: "#374151", lineHeight: 1.5, marginBottom: 4 },
   renovationRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3, borderBottom: "1px solid #f3f4f6", fontSize: 8 },
   renovationTotal: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, marginTop: 4, borderTop: "1px solid #e5e7eb", fontSize: 9, fontWeight: 700 },
@@ -228,7 +229,11 @@ export function CmaPdfDocument({ reportData, aiAnalysis, renovationData }: CmaPd
               <Text style={[styles.tdText, styles.colAddr]}>{comp.address}</Text>
               <Text style={[styles.tdText, styles.colType]}>{comp.propertyType ?? "—"}</Text>
               <View style={styles.colStatus}>
-                {comp.isSold ? <Text style={styles.soldBadge}>Inactive</Text> : <Text style={styles.activeBadge}>{comp.status}</Text>}
+                {comp.isSold ? (
+                  <Text style={styles.soldBadge}>Inactive</Text>
+                ) : (
+                  <Text style={styles.activeBadge}>Active</Text>
+                )}
               </View>
               <Text style={[styles.tdText, styles.colPrice]}>{formatPrice(comp.price)}</Text>
               <Text style={[styles.tdText, styles.colBeds]}>{comp.beds}</Text>

@@ -29,7 +29,8 @@ interface Props {
 
 const MAX_WAIT_SECONDS = 120; // 2 minutes before auto-cancelling
 
-export default function ProgressPanel({ onCancel }: Props) {
+export default function ProgressPanel({ onCancel, stages }: Props & { stages?: StageInfo[] }) {
+  const stageList = stages ?? STAGES;
   const [currentStage, setCurrentStage] = useState<string | null>(null);
   const [completedStages, setCompletedStages] = useState<Set<string>>(new Set());
   const [failedStage, setFailedStage] = useState<string | null>(null);
@@ -66,18 +67,18 @@ export default function ProgressPanel({ onCancel }: Props) {
       setProgress(pct);
 
       // Mark previous stages as completed
-      const stageIdx = STAGES.findIndex((s) => s.key === stage);
+      const stageIdx = stageList.findIndex((s) => s.key === stage);
       if (stageIdx >= 0) {
         const completed = new Set<string>();
         for (let i = 0; i < stageIdx; i++) {
-          completed.add(STAGES[i].key);
+          completed.add(stageList[i].key);
         }
         setCompletedStages(completed);
       }
     };
 
     const doneHandler = () => {
-      const completed = new Set(STAGES.map((s) => s.key));
+      const completed = new Set(stageList.map((s) => s.key));
       setCompletedStages(completed);
       setCurrentStage("done");
       setProgress(100);
@@ -170,7 +171,7 @@ export default function ProgressPanel({ onCancel }: Props) {
 
         {/* Stages */}
         <div className="space-y-0.5">
-          {STAGES.map((stage, idx) => {
+          {stageList.map((stage, idx) => {
             const status = getStageStatus(stage.key);
 
             return (
@@ -231,7 +232,7 @@ export default function ProgressPanel({ onCancel }: Props) {
                 </div>
 
                 {/* Connector line (except last item) */}
-                {idx < STAGES.length - 1 && (
+                {idx < stageList.length - 1 && (
                   <div className="flex-shrink-0 w-4 sm:w-5 flex justify-center">
                     <ChevronRight
                       className={`h-3 w-3 sm:h-3.5 sm:w-3.5 transition-colors duration-300 ${

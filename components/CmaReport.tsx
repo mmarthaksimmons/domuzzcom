@@ -70,6 +70,9 @@ export default function CmaReport({
                 src={subjectProperty.photo}
                 alt={subjectProperty.address}
                 className="w-full h-48 object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
               />
             </div>
           )}

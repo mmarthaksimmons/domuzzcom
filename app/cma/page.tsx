@@ -11,6 +11,7 @@ import CmaReport from "@/components/CmaReport";
 import CmaAiAnalysis from "@/components/CmaAiAnalysis";
 import RenovationAdjustments from "@/components/RenovationAdjustments";
 import EmailCaptureModal from "@/components/EmailCaptureModal";
+import ProgressPanel, { type ProgressEvent } from "@/components/ProgressPanel";
 
 const CmaMap = dynamic(() => import("@/components/CmaMap"), { ssr: false });
 const CmaCharts = dynamic(() => import("@/components/CmaCharts"), { ssr: false });
@@ -126,17 +127,14 @@ export default function CmaPage() {
 
         {loading && (
           <Card className="mb-8">
-            <CardContent className="py-12">
-              <div className="space-y-4 animate-pulse">
-                <div className="h-6 bg-muted rounded w-3/4" />
-                <div className="h-4 bg-muted rounded w-1/2" />
-                <div className="h-32 bg-muted rounded" />
-                <div className="h-4 bg-muted rounded w-full" />
-                <div className="h-4 bg-muted rounded w-5/6" />
-              </div>
-              <p className="text-center text-sm text-muted-foreground mt-6">
-                Fetching property data...
-              </p>
+            <CardContent className="py-8">
+              <ProgressPanel
+                stages={[
+                  { key: "detail", label: "Looking up subject property", icon: "🏠" },
+                  { key: "search", label: "Searching for area comparables", icon: "🔎" },
+                  { key: "estimate", label: "Computing property estimate", icon: "📊" },
+                ]}
+              />
             </CardContent>
           </Card>
         )}
