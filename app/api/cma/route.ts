@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIP } from "@/lib/rate-limit";
-import { normalizeRentCastResponse, RentCastResponse } from "@/lib/cma";
+import { scrapeCmaComps } from "@/lib/apify";
+import { normalizeApifyCmaResponse } from "@/lib/cma";
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,59 +39,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.RENTCAST_API_KEY;
+    const apifyToken = process.env.APIFY_TOKEN;
 
-    if (!apiKey || apiKey === "your_rentcast_api_key_here") {
+    if (!apifyToken || apifyToken === "your_apify_token_here") {
       return NextResponse.json(
-        { error: "RentCast API key is not configured on the server." },
+        { error: "Apify API token is not configured on the server." },
         { status: 500 }
       );
     }
 
-    // Call RentCast AVM value endpoint (GET with X-API-Key)
-    const rentCastUrl = `https://api.rentcast.io/v1/avm/value?address=${encodeURIComponent(address.trim())}`;
+    // Use Apify Zillow detail scraper — request 20 items each
+    // from RECENTLY_SOLD and FOR_SALE to get area comparables
+    const rawResults = await scrapeCmaComps(address.trim());
 
-    const rcResponse = await fetch(rentCastUrl, {
-      method: "GET",
-      headers: {
-        "X-API-Key": apiKey,
-      },
-    });
-
-    if (rcResponse.status === 429) {
-      return NextResponse.json(
-        { error: "RentCast API rate limit reached. Please try again later." },
-        { status: 429 }
-      );
-    }
-
-    if (!rcResponse.ok) {
-      const errorText = await rcResponse.text();
-      console.error("RentCast API error:", rcResponse.status, errorText);
-      return NextResponse.json(
-        {
-          error:
-            "Unable to generate a CMA report for this address. The address may be invalid or outside the coverage area.",
-        },
-        { status: rcResponse.status }
-      );
-    }
-
-    const data: RentCastResponse = await rcResponse.json();
-
-    // RentCast returns 405 with nested error for method issues
-    if ((data as unknown as { status?: number }).status === 405) {
-      return NextResponse.json(
-        {
-          error:
-            "Unable to generate a CMA report for this address. The address may be invalid or outside the coverage area.",
-        },
-        { status: 405 }
-      );
-    }
-
-    // Check if we have comparables
-    if (!data.comparables || data.comparables.length === 0) {
+    if (!rawResults || rawResults.length === 0) {
       return NextResponse.json(
         {
           error:
@@ -100,8 +62,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Normalize the response
-    const normalized = normalizeRentCastResponse(data);
+    // Normalize the Apify response into CMA report format
+    const normalized = normalizeApifyCmaResponse(address.trim(), rawResults);
+
+    if (!normalized.soldComparables.length && !normalized.activeComparables.length) {
+      return NextResponse.json(
+        {
+          error:
+            "No comparable properties found for this address. Try a different address or check that the property is in a supported area.",
+        },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json(normalized, {
       headers: {

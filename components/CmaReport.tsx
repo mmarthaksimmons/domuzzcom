@@ -31,11 +31,17 @@ function correlationPercent(c: number): string {
 
 function statusBadge(comparable: Comparable) {
   if (comparable.isSold) {
-    return <Badge variant="secondary">Inactive</Badge>;
+    return (
+      <Badge variant="outline" className="border-red-400 text-red-600 gap-1 pl-1.5">
+        <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+        Inactive
+      </Badge>
+    );
   }
   return (
-    <Badge variant="outline" className="border-yellow-500 text-yellow-600">
-      {comparable.status} (Active Listing)
+    <Badge variant="outline" className="border-green-400 text-green-600 gap-1 pl-1.5">
+      <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+      Active
     </Badge>
   );
 }
@@ -58,6 +64,15 @@ export default function CmaReport({
           <CardTitle className="text-lg">Subject Property</CardTitle>
         </CardHeader>
         <CardContent>
+          {subjectProperty.photo && (
+            <div className="mb-4 rounded-lg overflow-hidden max-h-48">
+              <img
+                src={subjectProperty.photo}
+                alt={subjectProperty.address}
+                className="w-full h-48 object-cover"
+              />
+            </div>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div>
               <p className="text-xs text-muted-foreground">Address</p>
