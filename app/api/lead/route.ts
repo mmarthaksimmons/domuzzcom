@@ -77,21 +77,31 @@ async function sendWelcomeEmail(email: string, firstName: string | null) {
   }
 }
 
-const CMA_AUDIENCE_ID = "09243177-3971-4779-9abf-2e4a54ab9b7a";
+const CMA_SEGMENT_ID = "09243177-3971-4779-9abf-2e4a54ab9b7a";
 
 async function addToCmaAudience(email: string, firstName: string | null) {
   const resendApiKey = process.env.RESEND_API_KEY;
   if (!resendApiKey || resendApiKey === "your_resend_api_key_here") return;
 
+  const normalizedEmail = email.trim().toLowerCase();
+
   try {
     const resend = new Resend(resendApiKey);
+
+    // 1. Create/upsert the contact
     await resend.contacts.create({
-      email: email.trim().toLowerCase(),
-      audienceId: CMA_AUDIENCE_ID,
+      email: normalizedEmail,
       firstName: firstName?.trim() || undefined,
     });
+
+    // 2. Add contact to the CMA segment by email
+    const result = await resend.contacts.segments.add({
+      email: normalizedEmail,
+      segmentId: CMA_SEGMENT_ID,
+    });
+    console.log("Resend add to CMA segment result:", result);
   } catch (err) {
-    console.error("Resend add to CMA audience error:", err);
+    console.error("Resend add to CMA segment error:", err);
   }
 }
 
@@ -127,8 +137,8 @@ export async function POST(request: NextRequest) {
     // Send welcome email (fire and forget, no PDF attachment)
     sendWelcomeEmail(email, firstName);
 
-    // Add to CMA audience segment in Resend (fire and forget)
-    addToCmaAudience(email, firstName);
+    // Add to CMA segment in Resend (await to surface errors)
+    await addToCmaAudience(email, firstName);
 
     return NextResponse.json({ success: true });
   } catch (error) {
