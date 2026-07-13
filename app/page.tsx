@@ -6,7 +6,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ArrowRight, Scale, FileText, PiggyBank } from "lucide-react";
+import {
+  ArrowRight,
+  Scale,
+  FileText,
+  PiggyBank,
+  Sparkles,
+  Receipt,
+  ClipboardCheck,
+  UserCheck,
+  Search,
+  Camera,
+  Gavel,
+  Landmark,
+  Megaphone,
+} from "lucide-react";
 
 interface ToolCard {
   title: string;
@@ -47,6 +61,96 @@ const tools: ToolCard[] = [
     icon: PiggyBank,
     cta: "Calculate Savings",
     available: true,
+    tags: ["Selling"],
+  },
+  {
+    title: "AI Listing Description Generator",
+    description:
+      "Generate professional, MLS-ready listing descriptions and social media captions with AI — just enter your property details.",
+    href: "#",
+    icon: Sparkles,
+    cta: "Coming Soon",
+    available: false,
+    tags: ["Selling"],
+  },
+  {
+    title: "Comparable Sales Finder",
+    description:
+      "Enter any address and instantly see recently sold nearby homes with sale price, $/sqft, and days on market.",
+    href: "#",
+    icon: Search,
+    cta: "Coming Soon",
+    available: false,
+    tags: ["Selling", "Buying"],
+  },
+  {
+    title: "FSBO Timeline & Checklist",
+    description:
+      "Interactive 90+ day checklist covering everything from pre-listing prep and photography to showings, offers, and closing.",
+    href: "#",
+    icon: ClipboardCheck,
+    cta: "Coming Soon",
+    available: false,
+    tags: ["Selling"],
+  },
+  {
+    title: "Net Proceeds Calculator",
+    description:
+      "Estimate your true walk-away cash with state-specific transfer taxes, title insurance, HOA prorations, and seller concessions.",
+    href: "#",
+    icon: Receipt,
+    cta: "Coming Soon",
+    available: false,
+    tags: ["Selling"],
+  },
+  {
+    title: "Buyer Qualification Screener",
+    description:
+      "Send a simple form to prospective buyers to verify pre-approval status, financing type, and timeline before you accept an offer.",
+    href: "#",
+    icon: UserCheck,
+    cta: "Coming Soon",
+    available: false,
+    tags: ["Selling"],
+  },
+  {
+    title: "Offer Comparison Tool",
+    description:
+      "Juggling multiple offers? Compare them side-by-side on price, financing, contingencies, earnest money, and closing timeline.",
+    href: "#",
+    icon: Gavel,
+    cta: "Coming Soon",
+    available: false,
+    tags: ["Selling"],
+  },
+  {
+    title: "Photography & Staging Guide",
+    description:
+      "Room-by-room checklist, smartphone photo tips, and staging advice to make your listing photos look like a pro shot them.",
+    href: "#",
+    icon: Camera,
+    cta: "Coming Soon",
+    available: false,
+    tags: ["Selling"],
+  },
+  {
+    title: "Closing Cost Estimator by State",
+    description:
+      "Interactive map showing typical seller closing costs in every state — transfer taxes, attorney requirements, and title insurance norms.",
+    href: "#",
+    icon: Landmark,
+    cta: "Coming Soon",
+    available: false,
+    tags: ["Selling"],
+  },
+  {
+    title: "FSBO Sign & Marketing Kit",
+    description:
+      "Generate printable yard sign templates with a QR code, flyers, and ready-to-post social copy — all branded for your listing.",
+    href: "#",
+    icon: Megaphone,
+    cta: "Coming Soon",
+    available: false,
     tags: ["Selling"],
   },
 ];
