@@ -28,32 +28,32 @@ const styles = StyleSheet.create({
   header: { marginBottom: 14, borderBottom: "2px solid #e5e7eb", paddingBottom: 10 },
   title: { fontSize: 20, fontWeight: 700, color: "#111827" },
   subtitle: { fontSize: 9, color: "#6b7280", marginTop: 2 },
-  sectionTitle: { fontSize: 13, fontWeight: 700, color: "#111827", marginTop: 14, marginBottom: 6, paddingBottom: 3, borderBottom: "1px solid #e5e7eb" },
-  card: { backgroundColor: "#f9fafb", padding: 10, borderRadius: 4, marginBottom: 10 },
+  sectionTitle: { fontSize: 12, fontWeight: 700, color: "#111827", marginTop: 10, marginBottom: 4, paddingBottom: 2, borderBottom: "1px solid #e5e7eb" },
+  card: { backgroundColor: "#f9fafb", padding: 8, borderRadius: 4, marginBottom: 6 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   col: { flex: 1, minWidth: "22%", marginBottom: 4 },
   label: { fontSize: 6, color: "#6b7280", textTransform: "uppercase", marginBottom: 1 },
   value: { fontSize: 9, fontWeight: 600, color: "#111827" },
   note: { fontSize: 6, color: "#9ca3af", marginTop: 4 },
-  estimateBox: { backgroundColor: "#eef2ff", padding: 12, borderRadius: 4, textAlign: "center", marginBottom: 10 },
-  estimateLabel: { fontSize: 8, color: "#6b7280", marginBottom: 1 },
-  estimateValue: { fontSize: 24, fontWeight: 700, color: "#4338ca" },
-  estimateRange: { fontSize: 8, color: "#6b7280", marginTop: 3 },
+  estimateBox: { backgroundColor: "#eef2ff", padding: 8, borderRadius: 4, textAlign: "center", marginBottom: 8 },
+  estimateLabel: { fontSize: 7, color: "#6b7280", marginBottom: 1 },
+  estimateValue: { fontSize: 18, fontWeight: 700, color: "#4338ca" },
+  estimateRange: { fontSize: 7, color: "#6b7280", marginTop: 2 },
   table: { marginTop: 6 },
   tableHeader: { flexDirection: "row", backgroundColor: "#f3f4f6", paddingVertical: 4, paddingHorizontal: 6, borderRadius: 3, marginBottom: 2 },
   tableRow: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6, borderBottom: "1px solid #f3f4f6" },
-  thText: { fontSize: 6, fontWeight: 700, color: "#6b7280", textTransform: "uppercase" },
+  thText: { fontSize: 6, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", textAlign: "left" },
   tdText: { fontSize: 7, color: "#374151" },
   colAddr: { flex: 2.5 },
   colType: { flex: 1 },
   colStatus: { flex: 1.2 },
-  colPrice: { flex: 1.2, textAlign: "right" },
-  colBeds: { flex: 0.5, textAlign: "center" },
-  colBaths: { flex: 0.5, textAlign: "center" },
-  colSqft: { flex: 0.8, textAlign: "right" },
-  colDist: { flex: 0.7, textAlign: "right" },
-  colDom: { flex: 0.5, textAlign: "right" },
-  colMatch: { flex: 0.6, textAlign: "right" },
+  colPrice: { flex: 1.2 },
+  colBeds: { flex: 0.5 },
+  colBaths: { flex: 0.5 },
+  colSqft: { flex: 0.8 },
+  colDist: { flex: 0.7 },
+  colDom: { flex: 0.5 },
+  colMatch: { flex: 0.6 },
   disclaimer: { marginTop: 16, fontSize: 6, color: "#9ca3af", textAlign: "center", borderTop: "1px solid #e5e7eb", paddingTop: 10 },
   footer: { position: "absolute", bottom: 16, left: 36, right: 36, fontSize: 6, color: "#9ca3af", textAlign: "center" },
   soldBadge: { backgroundColor: "#fef2f2", color: "#dc2626", fontSize: 6, paddingHorizontal: 3, paddingVertical: 1, borderRadius: 2 },
@@ -89,7 +89,42 @@ interface CmaPdfProps {
 
 export function CmaPdfDocument({ reportData, aiAnalysis, renovationData }: CmaPdfProps) {
   const { subjectProperty, estimate, soldComparables, activeComparables } = reportData;
+
+  // Compute market stats for PDF (same logic as screen)
   const allComparables = [...soldComparables, ...activeComparables];
+  const compsWithPrice = allComparables.filter((c) => c.price > 0);
+  const compsWithSqft = allComparables.filter((c) => c.price > 0 && c.sqft > 0);
+  const compsWithDom = allComparables.filter((c) => c.daysOnMarket != null);
+
+  const prices = compsWithPrice.map((c) => c.price).sort((a, b) => a - b);
+  const n = prices.length;
+  const medPrice = n > 0
+    ? (n % 2 === 0 ? (prices[n / 2 - 1] + prices[n / 2]) / 2 : prices[Math.floor(n / 2)])
+    : 0;
+  const avgPpsf = compsWithSqft.length > 0
+    ? Math.round(compsWithSqft.reduce((s, c) => s + c.price / c.sqft, 0) / compsWithSqft.length)
+    : null;
+  const avgDom = compsWithDom.length > 0
+    ? Math.round(compsWithDom.reduce((s, c) => s + (c.daysOnMarket ?? 0), 0) / compsWithDom.length)
+    : null;
+
+  // Market condition score (0-100, higher = seller's market)
+  let marketLabel = "Balanced Market";
+  let marketColor = "#f59e0b";
+  let marketScore = 50;
+  if (avgDom != null) {
+    if (avgDom < 30) {
+      marketLabel = "Seller's Market";
+      marketColor = "#16a34a";
+      marketScore = Math.round(95 - (avgDom / 30) * 40);
+    } else if (avgDom > 60) {
+      marketLabel = "Buyer's Market";
+      marketColor = "#dc2626";
+      marketScore = Math.max(5, Math.round(45 - ((avgDom - 60) / 120) * 40));
+    } else {
+      marketScore = Math.round(55 - ((avgDom - 30) / 30) * 10);
+    }
+  }
 
   const selectedRenovations = renovationData?.renovations
     ? Object.entries(renovationData.renovations)
@@ -150,7 +185,39 @@ export function CmaPdfDocument({ reportData, aiAnalysis, renovationData }: CmaPd
           <Text style={styles.estimateLabel}>Estimated Market Value</Text>
           <Text style={styles.estimateValue}>{formatPrice(estimate.price)}</Text>
           <Text style={styles.estimateRange}>Range: {formatPrice(estimate.priceRangeLow)} – {formatPrice(estimate.priceRangeHigh)}</Text>
+          <Text style={{ fontSize: 6, color: "#6b7280", marginTop: 4, textAlign: "center" }}>
+            Computed from {allComparables.length} comparable listings using a weighted blend of size-adjusted price-per-square-foot and statistical median, with outlier filtering for accuracy.
+          </Text>
         </View>
+
+        {/* Market Overview */}
+        {n > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Market Overview</Text>
+            <View style={styles.card}>
+              <View style={[styles.row, { justifyContent: "space-around" }]}>
+                <View style={{ alignItems: "center" }}>
+                  <Text style={styles.label}>Avg $/Sq Ft</Text>
+                  <Text style={styles.value}>{avgPpsf ? formatPrice(avgPpsf) : "—"}</Text>
+                </View>
+                <View style={{ alignItems: "center" }}>
+                  <Text style={styles.label}>Median Price</Text>
+                  <Text style={styles.value}>{formatPrice(medPrice)}</Text>
+                </View>
+                <View style={{ alignItems: "center" }}>
+                  <Text style={styles.label}>Market Condition</Text>
+                  <Text style={[styles.value, { color: marketColor }]}>
+                    {marketLabel} ({marketScore}/100)
+                  </Text>
+                </View>
+                <View style={{ alignItems: "center" }}>
+                  <Text style={styles.label}>Avg Days on Market</Text>
+                  <Text style={styles.value}>{avgDom != null ? `${avgDom} days` : "—"}</Text>
+                </View>
+              </View>
+            </View>
+          </>
+        )}
 
         {/* Adjusted Estimate */}
         {renovationData && renovationData.totalSpent > 0 && (
@@ -205,46 +272,83 @@ export function CmaPdfDocument({ reportData, aiAnalysis, renovationData }: CmaPd
           </>
         )}
 
-        {/* Comparables */}
-        <Text style={styles.sectionTitle}>
-          Comparable Properties ({allComparables.length})
-          {activeComparables.length > 0 ? " — includes active listings" : ""}
-        </Text>
-
-        <View style={styles.table}>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.thText, styles.colAddr]}>Address</Text>
-            <Text style={[styles.thText, styles.colType]}>Type</Text>
-            <Text style={[styles.thText, styles.colStatus]}>Status</Text>
-            <Text style={[styles.thText, styles.colPrice]}>Price</Text>
-            <Text style={[styles.thText, styles.colBeds]}>Bed</Text>
-            <Text style={[styles.thText, styles.colBaths]}>Bath</Text>
-            <Text style={[styles.thText, styles.colSqft]}>Sq Ft</Text>
-            <Text style={[styles.thText, styles.colDist]}>Dist</Text>
-            <Text style={[styles.thText, styles.colDom]}>DOM</Text>
-            <Text style={[styles.thText, styles.colMatch]}>Match</Text>
-          </View>
-          {allComparables.map((comp, i) => (
-            <View style={styles.tableRow} key={i}>
-              <Text style={[styles.tdText, styles.colAddr]}>{comp.address}</Text>
-              <Text style={[styles.tdText, styles.colType]}>{comp.propertyType ?? "—"}</Text>
-              <View style={styles.colStatus}>
-                {comp.isSold ? (
-                  <Text style={styles.soldBadge}>Inactive</Text>
-                ) : (
-                  <Text style={styles.activeBadge}>Active</Text>
-                )}
+        {/* Sold Comparables */}
+        {soldComparables.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>
+              Recently Sold Properties ({soldComparables.length}) — closed sales
+            </Text>
+            <View style={styles.table}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.colAddr, styles.thText]}>Address</Text>
+                <Text style={[styles.colType, styles.thText]}>Type</Text>
+                <Text style={[styles.colStatus, styles.thText]}>Status</Text>
+                <Text style={[styles.colPrice, styles.thText]}>Price</Text>
+                <Text style={[styles.colBeds, styles.thText]}>Bed</Text>
+                <Text style={[styles.colBaths, styles.thText]}>Bath</Text>
+                <Text style={[styles.colSqft, styles.thText]}>Sq Ft</Text>
+                <Text style={[styles.colDist, styles.thText]}>Dist</Text>
+                <Text style={[styles.colDom, styles.thText]}>DOM</Text>
+                <Text style={[styles.colMatch, styles.thText]}>Match</Text>
               </View>
-              <Text style={[styles.tdText, styles.colPrice]}>{formatPrice(comp.price)}</Text>
-              <Text style={[styles.tdText, styles.colBeds]}>{comp.beds}</Text>
-              <Text style={[styles.tdText, styles.colBaths]}>{comp.baths}</Text>
-              <Text style={[styles.tdText, styles.colSqft]}>{formatNumber(comp.sqft)}</Text>
-              <Text style={[styles.tdText, styles.colDist]}>{comp.distance !== null ? `${comp.distance.toFixed(1)} mi` : "—"}</Text>
-              <Text style={[styles.tdText, styles.colDom]}>{comp.daysOnMarket !== null ? comp.daysOnMarket : "—"}</Text>
-              <Text style={[styles.tdText, styles.colMatch]}>{Math.round(comp.correlation * 100)}%</Text>
+              {soldComparables.map((comp, i) => (
+                <View style={styles.tableRow} key={`sold-${i}`}>
+                  <Text style={[styles.tdText, styles.colAddr]}>{comp.address}</Text>
+                  <Text style={[styles.tdText, styles.colType]}>{comp.propertyType ?? "—"}</Text>
+                  <View style={styles.colStatus}>
+                    <Text style={styles.soldBadge}>Sold</Text>
+                  </View>
+                  <Text style={[styles.tdText, styles.colPrice]}>{formatPrice(comp.price)}</Text>
+                  <Text style={[styles.tdText, styles.colBeds]}>{comp.beds}</Text>
+                  <Text style={[styles.tdText, styles.colBaths]}>{comp.baths}</Text>
+                  <Text style={[styles.tdText, styles.colSqft]}>{formatNumber(comp.sqft)}</Text>
+                  <Text style={[styles.tdText, styles.colDist]}>{comp.distance !== null ? `${comp.distance.toFixed(1)} mi` : "—"}</Text>
+                  <Text style={[styles.tdText, styles.colDom]}>{comp.daysOnMarket !== null ? comp.daysOnMarket : "—"}</Text>
+                  <Text style={[styles.tdText, styles.colMatch]}>{Math.round(comp.correlation * 100)}%</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
+          </>
+        )}
+
+        {/* Active Listings */}
+        {activeComparables.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>
+              Active Listings ({activeComparables.length}) — currently for sale
+            </Text>
+            <View style={styles.table}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.colAddr, styles.thText]}>Address</Text>
+                <Text style={[styles.colType, styles.thText]}>Type</Text>
+                <Text style={[styles.colStatus, styles.thText]}>Status</Text>
+                <Text style={[styles.colPrice, styles.thText]}>Price</Text>
+                <Text style={[styles.colBeds, styles.thText]}>Bed</Text>
+                <Text style={[styles.colBaths, styles.thText]}>Bath</Text>
+                <Text style={[styles.colSqft, styles.thText]}>Sq Ft</Text>
+                <Text style={[styles.colDist, styles.thText]}>Dist</Text>
+                <Text style={[styles.colDom, styles.thText]}>DOM</Text>
+                <Text style={[styles.colMatch, styles.thText]}>Match</Text>
+              </View>
+              {activeComparables.map((comp, i) => (
+                <View style={styles.tableRow} key={`active-${i}`}>
+                  <Text style={[styles.tdText, styles.colAddr]}>{comp.address}</Text>
+                  <Text style={[styles.tdText, styles.colType]}>{comp.propertyType ?? "—"}</Text>
+                  <View style={styles.colStatus}>
+                    <Text style={styles.activeBadge}>Active</Text>
+                  </View>
+                  <Text style={[styles.tdText, styles.colPrice]}>{formatPrice(comp.price)}</Text>
+                  <Text style={[styles.tdText, styles.colBeds]}>{comp.beds}</Text>
+                  <Text style={[styles.tdText, styles.colBaths]}>{comp.baths}</Text>
+                  <Text style={[styles.tdText, styles.colSqft]}>{formatNumber(comp.sqft)}</Text>
+                  <Text style={[styles.tdText, styles.colDist]}>{comp.distance !== null ? `${comp.distance.toFixed(1)} mi` : "—"}</Text>
+                  <Text style={[styles.tdText, styles.colDom]}>{comp.daysOnMarket !== null ? comp.daysOnMarket : "—"}</Text>
+                  <Text style={[styles.tdText, styles.colMatch]}>{Math.round(comp.correlation * 100)}%</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
 
         <Text style={styles.mapNote}>All comparable locations are shown on the interactive map at domuzz.com/cma</Text>
 

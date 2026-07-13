@@ -32,7 +32,7 @@ const subjectIcon = new L.DivIcon({
 const compIcon = (isSold: boolean) =>
   new L.DivIcon({
     className: "",
-    html: `<div style="background:${isSold ? "#16a34a" : "#ca8a04"};color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;border:2px solid ${isSold ? "#15803d" : "#a16207"};box-shadow:0 1px 5px rgba(0,0,0,0.3)">${isSold ? "S" : "A"}</div>`,
+    html: `<div style="background:${isSold ? "#dc2626" : "#16a34a"};color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;border:2px solid ${isSold ? "#b91c1c" : "#15803d"};box-shadow:0 1px 5px rgba(0,0,0,0.3)">${isSold ? "S" : "A"}</div>`,
     iconSize: [22, 22],
     iconAnchor: [11, 11],
   });
@@ -149,12 +149,12 @@ export default function CmaMap({ reportData }: CmaMapProps) {
             Subject
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-3 rounded-full bg-green-600 border border-green-800" />{" "}
-            Sold/Inactive
+            <span className="inline-block w-3 h-3 rounded-full bg-red-600 border border-red-800" />{" "}
+            S - Sold
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-3 rounded-full bg-yellow-600 border border-yellow-800" />{" "}
-            Active
+            <span className="inline-block w-3 h-3 rounded-full bg-green-600 border border-green-800" />{" "}
+            A - Active
           </span>
         </div>
       </CardContent>

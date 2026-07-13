@@ -244,12 +244,6 @@ export function normalizeRentCastResponse(
 /**
  * Extract a comparable from a raw Apify result, handling both the
  * detail-scraper schema and the search-scraper schema.
- *
- * Detail scraper fields: address.streetAddress, abbreviatedAddress,
- *   bedrooms, bathrooms, livingArea, homeType, latitude, longitude, etc.
- * Search scraper fields: address (string), beds, baths, area,
- *   unformattedPrice, latLong.latitude/longitude, statusType,
- *   hdpData.homeInfo.homeType, hdpData.homeInfo.yearBuilt, etc.
  */
 function parseRawComparable(
   raw: any,
@@ -258,24 +252,19 @@ function parseRawComparable(
 ): Comparable | null {
   const isDetail = raw.address && typeof raw.address === "object";
 
-  // ---- address ----
   const compAddress: string = isDetail
     ? (raw.address.streetAddress ?? raw.abbreviatedAddress ?? "")
     : (raw.address ?? "");
 
-  // ---- price ----
   const compPrice: number | null = isDetail
     ? raw.price
     : (raw.unformattedPrice ?? null);
   if (!compPrice || compPrice <= 0) return null;
 
-  // ---- status ----
   const compStatus: string | null = isDetail
     ? (raw.homeStatus ?? raw.statusText ?? null)
     : (raw.statusType ?? raw.statusText ?? null);
 
-  // Determine if property is no longer actively for sale.
-  // "OTHER" = off-market/pending/contingent (not active), treat as inactive.
   const isSold =
     compStatus === "SOLD" ||
     compStatus === "Sold" ||
@@ -283,21 +272,18 @@ function parseRawComparable(
     compStatus === "OTHER" ||
     (typeof compStatus === "string" && compStatus.toLowerCase().includes("sold"));
 
-  // ---- beds / baths / sqft ----
   const compBeds: number = (isDetail ? raw.bedrooms : raw.beds) ?? 0;
   const compBaths: number = (isDetail ? raw.bathrooms : raw.baths) ?? 0;
   const compSqft: number = (isDetail
     ? (raw.livingArea ?? raw.livingAreaValue)
     : raw.area) ?? 0;
 
-  // ---- property type ----
   const hdpType = raw.hdpData?.homeInfo?.homeType;
   const rawType = isDetail
     ? (raw.homeType ?? raw.propertyType)
     : (hdpType ?? raw.homeType ?? raw.propertyType);
   const compPropertyType = formatHomeTypeAsPropertyType(rawType);
 
-  // ---- year built / lot size ----
   const compYearBuilt: number | null = isDetail
     ? raw.yearBuilt
     : (hdpType ? raw.hdpData?.homeInfo?.yearBuilt : null) ?? null;
@@ -305,7 +291,6 @@ function parseRawComparable(
     ? (raw.lotAreaValue ?? raw.lotSize)
     : null;
 
-  // ---- coordinates ----
   const compLat: number | null = isDetail
     ? (raw.latitude ?? raw.lat)
     : raw.latLong?.latitude ?? null;
@@ -313,13 +298,10 @@ function parseRawComparable(
     ? (raw.longitude ?? raw.lng)
     : raw.latLong?.longitude ?? null;
 
-  // ---- days on market ----
   let compDom: number | null = null;
   if (isDetail) {
     compDom = raw.daysOnZillow ?? null;
   } else {
-    // Search scraper: try hdpData.homeInfo.daysOnZillow first,
-    // then parse variableData.text like "38 days on Zillow"
     const hdpDom = raw.hdpData?.homeInfo?.daysOnZillow;
     if (hdpDom != null && hdpDom >= 0) {
       compDom = hdpDom;
@@ -332,7 +314,6 @@ function parseRawComparable(
     }
   }
 
-  // ---- distance ----
   const dist = computeDistance(subjectLat, subjectLng, compLat, compLng);
 
   return {
@@ -356,17 +337,12 @@ function parseRawComparable(
 
 /**
  * Normalize Apify results (detail scraper + search scraper) into CMAReportData.
- *
- * The results array contains:
- *   [0] = subject property from detail scraper
- *   [1..N] = area comparables from search scraper (sold + active)
- *
- * We extract subject details from result[0], build comparables from all
- * results, and compute an estimate from the sold comps median.
+ * soldResults comes from the zip-search scraper (sold:true).
  */
 export function normalizeApifyCmaResponse(
   address: string,
-  rawResults: any[]
+  rawResults: any[],
+  soldResults?: any[]
 ): CMAReportData {
   if (!rawResults || rawResults.length === 0) {
     throw new Error("No property data returned from Apify");
@@ -390,19 +366,15 @@ export function normalizeApifyCmaResponse(
   const subjectBeds: number | null = isDetailSubject
     ? (best.bedrooms ?? null)
     : (best.beds ?? null);
-
   const subjectBaths: number | null = isDetailSubject
     ? (best.bathrooms ?? null)
     : (best.baths ?? null);
-
   const subjectSqft: number | null = isDetailSubject
     ? (best.livingArea ?? best.livingAreaValue ?? null)
     : (best.area ?? null);
-
   const subjectLotSize: number | null = isDetailSubject
     ? (best.lotAreaValue ?? best.lotSize ?? null)
     : null;
-
   const subjectYearBuilt: number | null = best.yearBuilt ?? null;
 
   const hdpHomeType = best.hdpData?.homeInfo?.homeType;
@@ -410,23 +382,31 @@ export function normalizeApifyCmaResponse(
     ? (best.homeType ?? best.propertyType)
     : (hdpHomeType ?? best.homeType ?? best.propertyType);
 
-  // Extract photo URL from detail scraper data.
-  // Only use Zillow-hosted photos (photos.zillowstatic.com), never
-  // Google Street View maps URLs which may be blocked or show errors.
+  // Extract photo: prefer Google Street View (legal), fall back to Zillow
   let subjectPhoto: string | null = null;
   if (isDetailSubject) {
-    // Extract all photos.zillowstatic.com URLs from the raw JSON —
-    // these are actual property photos, not Street View placeholders
-    const raw = JSON.stringify(best);
-    const matches = raw.match(/https?:\/\/photos\.zillowstatic\.com\/[^"\\]+/g);
-    if (matches && matches.length > 0) {
-      // Use the largest available photo (sorted by resolution suffix)
-      // Suffixes: cc_ft_1536 > cc_ft_1152 > cc_ft_960 > cc_ft_768 > cc_ft_576 > cc_ft_384 > cc_ft_192
-      const preferred = matches.find((u) => u.includes("cc_ft_1536"))
-        ?? matches.find((u) => u.includes("cc_ft_1152"))
-        ?? matches.find((u) => u.includes("cc_ft_960"))
-        ?? matches[0];
-      subjectPhoto = preferred;
+    // Google Street View from originalPhotos or responsivePhotos
+    const op = best.originalPhotos;
+    const rp = best.responsivePhotos;
+    const streetViewUrl =
+      (Array.isArray(op) && op[0]?.mixedSources?.jpeg?.[0]?.url) ||
+      (Array.isArray(op) && op[0]?.url) ||
+      (Array.isArray(rp) && rp[0]?.mixedSources?.jpeg?.[0]?.url) ||
+      (Array.isArray(rp) && rp[0]?.url) ||
+      null;
+    if (streetViewUrl) {
+      subjectPhoto = streetViewUrl;
+    } else {
+      // Fallback: Zillow photo URLs
+      const raw = JSON.stringify(best);
+      const matches = raw.match(/https?:\/\/photos\.zillowstatic\.com\/[^"\\]+/g);
+      if (matches && matches.length > 0) {
+        subjectPhoto =
+          matches.find((u) => u.includes("cc_ft_1536"))
+          ?? matches.find((u) => u.includes("cc_ft_1152"))
+          ?? matches.find((u) => u.includes("cc_ft_960"))
+          ?? matches[0];
+      }
     }
   } else {
     subjectPhoto = best.imgSrc ?? best.hdpData?.homeInfo?.photo ?? null;
@@ -445,64 +425,104 @@ export function normalizeApifyCmaResponse(
     photo: subjectPhoto,
   };
 
-  // ---- Build comparables from all results (EXCLUDE subject address) ----
+  // ---- Build comparables (EXCLUDE subject) ----
   const soldComparables: Comparable[] = [];
   const activeComparables: Comparable[] = [];
   const seenAddresses = new Set<string>();
-
-  // Normalize subject address for exclusion matching
   const subjectAddrKey = subjectAddress.toLowerCase().trim().replace(/[,.]/g, "");
 
   for (const raw of rawResults) {
     const comp = parseRawComparable(raw, subjectLat, subjectLng);
     if (!comp) continue;
-
-    // Deduplicate by address
     const key = comp.address.toLowerCase().trim();
     if (seenAddresses.has(key)) continue;
-
-    // Exclude subject property from comparables table
-    // (match by street/address — detail scraper returns exact match)
     const compAddrSimple = key.replace(/[,.]/g, "");
     if (
       compAddrSimple === subjectAddrKey ||
       compAddrSimple.startsWith(subjectAddrKey) ||
       subjectAddrKey.startsWith(compAddrSimple)
     ) continue;
-
     seenAddresses.add(key);
+    // Filter active listings to same property type as subject
+    if (
+      !comp.isSold &&
+      subjectHomeType &&
+      comp.propertyType &&
+      subjectHomeType.toUpperCase() !==
+        (comp.propertyType === "Single Family"
+          ? "SINGLE_FAMILY"
+          : comp.propertyType === "Condo"
+          ? "CONDO"
+          : comp.propertyType === "Townhouse"
+          ? "TOWNHOUSE"
+          : comp.propertyType === "Multi-Family"
+          ? "MULTI_FAMILY"
+          : comp.propertyType === "Manufactured"
+          ? "MANUFACTURED"
+          : comp.propertyType.toUpperCase())
+    ) {
+      continue;
+    }
+    if (comp.isSold) soldComparables.push(comp);
+    else activeComparables.push(comp);
+  }
 
-    if (comp.isSold) {
-      soldComparables.push(comp);
-    } else {
-      activeComparables.push(comp);
+  // ---- Process zip-search SOLD results ----
+  if (soldResults && soldResults.length > 0) {
+    for (const raw of soldResults) {
+      const compAddress = raw.address ?? raw.addressStreet ?? "";
+      if (!compAddress) continue;
+      const price = raw.unformattedPrice;
+      if (!price || price <= 0) continue;
+      const key = compAddress.toLowerCase().trim();
+      if (seenAddresses.has(key)) continue;
+      seenAddresses.add(key);
+      const compAddrSimple = key.replace(/[,.]/g, "");
+      if (
+        compAddrSimple === subjectAddrKey ||
+        compAddrSimple.startsWith(subjectAddrKey) ||
+        subjectAddrKey.startsWith(compAddrSimple)
+      ) continue;
+      const compLat = raw.latLong?.latitude ?? null;
+      const compLng = raw.latLong?.longitude ?? null;
+      const dist = computeDistance(subjectLat, subjectLng, compLat, compLng);
+      const compHdpHomeType = raw.hdpData?.homeInfo?.homeType;
+      const compRawType = compHdpHomeType ?? raw.homeType ?? raw.propertyType;
+      // Filter sold comps: must match subject property type
+      if (subjectHomeType && compRawType) {
+        const compLabel = formatHomeTypeAsPropertyType(compRawType);
+        const subjectLabel = formatHomeTypeAsPropertyType(subjectHomeType);
+        if (compLabel !== subjectLabel) continue;
+      }
+      soldComparables.push({
+        address: compAddress,
+        status: "SOLD",
+        price: price,
+        beds: raw.beds ?? 0,
+        baths: raw.baths ?? 0,
+        sqft: raw.area ?? 0,
+        lotSize: null,
+        yearBuilt: null,
+        propertyType: formatHomeTypeAsPropertyType(compHdpHomeType ?? raw.homeType ?? raw.propertyType),
+        distance: dist,
+        daysOnMarket: raw.hdpData?.homeInfo?.daysOnZillow ?? null,
+        correlation: 0.85,
+        isSold: true,
+        latitude: compLat,
+        longitude: compLng,
+      });
     }
   }
 
-  // ---- Score + filter BEFORE computing estimate ----
-  // Score every comparable against the subject property so outliers
-  // don't contaminate the estimate (e.g. $11M/30K sqft mansion).
+  // ---- Score + filter ----
   const allCompsUnsorted = [...soldComparables, ...activeComparables];
   const allPrices = allCompsUnsorted.map((c) => c.price).sort((a, b) => a - b);
-  const rawMedian =
-    allPrices.length > 0
-      ? allPrices[Math.floor(allPrices.length / 2)]
-      : 0;
+  const rawMedian = allPrices.length > 0 ? allPrices[Math.floor(allPrices.length / 2)] : 0;
 
   for (const comp of allCompsUnsorted) {
     let score = 1.0;
-
-    // Beds: -0.08 per bed difference
-    if (subjectBeds && comp.beds) {
-      score -= Math.abs(comp.beds - subjectBeds) * 0.08;
-    }
-
-    // Baths: -0.06 per bath difference
-    if (subjectBaths && comp.baths) {
-      score -= Math.abs(comp.baths - subjectBaths) * 0.06;
-    }
-
-    // Sqft: progressive penalty
+    if (subjectBeds && comp.beds) score -= Math.abs(comp.beds - subjectBeds) * 0.08;
+    if (subjectBaths && comp.baths) score -= Math.abs(comp.baths - subjectBaths) * 0.06;
     if (subjectSqft && comp.sqft && subjectSqft > 0) {
       const sqftRatio = Math.abs(comp.sqft - subjectSqft) / subjectSqft;
       if (sqftRatio > 2.0) score -= 0.6;
@@ -510,13 +530,7 @@ export function normalizeApifyCmaResponse(
       else if (sqftRatio > 0.5) score -= 0.2;
       else score -= sqftRatio * 0.15;
     }
-
-    // Distance: -0.05 per mile
-    if (comp.distance != null) {
-      score -= comp.distance * 0.05;
-    }
-
-    // Price outlier penalty
+    if (comp.distance != null) score -= comp.distance * 0.05;
     if (rawMedian > 0 && comp.price > 0) {
       const priceRatio = Math.abs(comp.price - rawMedian) / rawMedian;
       if (priceRatio > 5.0) score -= 0.6;
@@ -524,147 +538,121 @@ export function normalizeApifyCmaResponse(
       else if (priceRatio > 1.0) score -= 0.15;
       else if (priceRatio > 0.5) score -= 0.05;
     }
-
     comp.correlation = Math.max(0, Math.min(1, Math.round(score * 100) / 100));
   }
 
-  // Filter: only comps with correlation >= 0.35, top 20
   const MIN_CORRELATION = 0.35;
-  const MAX_COMPS = 20;
+  const MAX_PER_GROUP = 15;
 
-  const allCompsScored = allCompsUnsorted
-    .filter((c) => c.correlation >= MIN_CORRELATION)
+  // Score and filter sold/active independently so each group gets its own slots
+  const scoredSold = allCompsUnsorted
+    .filter((c) => c.correlation >= MIN_CORRELATION && c.isSold)
     .sort((a, b) => b.correlation - a.correlation)
-    .slice(0, MAX_COMPS);
+    .slice(0, MAX_PER_GROUP);
 
-  const filteredSold = allCompsScored.filter((c) => c.isSold);
-  const filteredActive = allCompsScored.filter((c) => !c.isSold);
+  const scoredActive = allCompsUnsorted
+    .filter((c) => c.correlation >= MIN_CORRELATION && !c.isSold)
+    .sort((a, b) => b.correlation - a.correlation)
+    .slice(0, MAX_PER_GROUP);
 
-  // ---- Compute estimate from FILTERED comps only ----
-  const compsWithSqft = allCompsScored.filter(
-    (c) => c.price > 0 && c.sqft > 0
-  );
+  const allCompsScored = [...scoredSold, ...scoredActive]
+    .sort((a, b) => b.correlation - a.correlation);
 
-  const filteredPrices = compsWithSqft
-    .map((c) => c.price)
-    .sort((a, b) => a - b);
+  const filteredSold = scoredSold;
+  const filteredActive = scoredActive;
 
-  // Get Zestimate as sanity anchor (pulls estimate toward Zillow's own valuation)
+  // ---- Compute estimate from filtered comps ----
+  const compsWithSqft = allCompsScored.filter((c) => c.price > 0 && c.sqft > 0);
+  const pricesForEstimate = compsWithSqft.map((c) => c.price);
   const zestimateVal: number | null = best.zestimate ?? null;
-
   let estimate: EstimateRange;
 
-  if (filteredPrices.length >= 4 && subjectSqft && subjectSqft > 0) {
-    const n = filteredPrices.length;
-
-    // Weighted price-per-sqft from top-matching comps
-    const ppsfEntries = compsWithSqft.map((c) => ({
-      ppsf: c.price / c.sqft,
-      weight: Math.max(0.1, 1 - Math.abs(c.sqft - subjectSqft) / subjectSqft),
-    }));
-    const totalWeight = ppsfEntries.reduce((s, e) => s + e.weight, 0);
-    const weightedPpsf =
-      ppsfEntries.reduce((s, e) => s + e.ppsf * e.weight, 0) / totalWeight;
-    const perSqftEstimate = weightedPpsf * subjectSqft;
-
-    // Median of filtered comps
-    const median =
-      n % 2 === 0
-        ? (filteredPrices[n / 2 - 1] + filteredPrices[n / 2]) / 2
-        : filteredPrices[Math.floor(n / 2)];
-
-    // Blend: 50% per-sqft + 30% median + 20% Zestimate anchor
-    // (if Zestimate available, otherwise 60/40)
-    if (zestimateVal && zestimateVal > 0) {
-      const blended = perSqftEstimate * 0.5 + median * 0.3 + zestimateVal * 0.2;
-      estimate = {
-        price: Math.round(blended),
-        priceRangeLow: Math.round(filteredPrices[Math.floor(n * 0.1)]),
-        priceRangeHigh: Math.round(filteredPrices[Math.floor(n * 0.9)]),
-      };
-    } else {
-      const blended = perSqftEstimate * 0.6 + median * 0.4;
-      estimate = {
-        price: Math.round(blended),
-        priceRangeLow: Math.round(filteredPrices[Math.floor(n * 0.1)]),
-        priceRangeHigh: Math.round(filteredPrices[Math.floor(n * 0.9)]),
-      };
-    }
-  } else if (filteredPrices.length >= 3) {
-    // No subject sqft, use pure median
-    const n = filteredPrices.length;
-    const median =
-      n % 2 === 0
-        ? (filteredPrices[n / 2 - 1] + filteredPrices[n / 2]) / 2
-        : filteredPrices[Math.floor(n / 2)];
-
-    if (zestimateVal && zestimateVal > 0) {
-      const blended = median * 0.7 + zestimateVal * 0.3;
-      estimate = {
-        price: Math.round(blended),
-        priceRangeLow: Math.round(filteredPrices[Math.floor(n * 0.1)]),
-        priceRangeHigh: Math.round(filteredPrices[Math.floor(n * 0.9)]),
-      };
-    } else {
-      estimate = {
-        price: Math.round(median),
-        priceRangeLow: Math.round(filteredPrices[Math.floor(n * 0.1)]),
-        priceRangeHigh: Math.round(filteredPrices[Math.floor(n * 0.9)]),
-      };
-    }
+  if (pricesForEstimate.length === 0) {
+    estimate = { price: 0, priceRangeLow: 0, priceRangeHigh: 0 };
   } else {
-    // 1-2 comps only
-    const avg =
-      filteredPrices.reduce((s, p) => s + p, 0) / (filteredPrices.length || 1);
-    estimate = {
-      price: Math.round(avg),
-      priceRangeLow: Math.round(avg * 0.85),
-      priceRangeHigh: Math.round(avg * 1.15),
-    };
+    const trimmedPrices = trimOutliersIQR(pricesForEstimate);
+    const validPrices = trimmedPrices.length >= 3 ? trimmedPrices : pricesForEstimate;
+
+    if (validPrices.length >= 4 && subjectSqft && subjectSqft > 0) {
+      const scoredComps = compsWithSqft
+        .filter((c) => validPrices.includes(c.price))
+        .map((c) => ({
+          price: c.price,
+          compositeWeight:
+            recencyWeight(c.daysOnMarket ?? 365) * 0.2 +
+            distanceWeight(c.distance ?? undefined) * 0.15 +
+            sqftSimilarityWeight(c.sqft, subjectSqft!) * 0.35 +
+            c.correlation * 0.3,
+        }));
+      const sortedByPrice = [...scoredComps].sort((a, b) => a.price - b.price);
+      const totalWeight = sortedByPrice.reduce((s, e) => s + e.compositeWeight, 0);
+      let cumWeight = 0;
+      let weightedMedian = sortedByPrice[0].price;
+      for (const sc of sortedByPrice) {
+        cumWeight += sc.compositeWeight;
+        if (cumWeight >= totalWeight / 2) { weightedMedian = sc.price; break; }
+      }
+      const avgPrice = validPrices.reduce((s, p) => s + p, 0) / validPrices.length;
+      const blended = zestimateVal && zestimateVal > 0
+        ? weightedMedian * 0.45 + avgPrice * 0.25 + zestimateVal * 0.3
+        : weightedMedian * 0.6 + avgPrice * 0.4;
+      estimate = {
+        price: Math.round(blended),
+        priceRangeLow: Math.round(validPrices[Math.floor(validPrices.length * 0.1)]),
+        priceRangeHigh: Math.round(validPrices[Math.floor(validPrices.length * 0.9)]),
+      };
+    } else if (validPrices.length >= 3) {
+      const med = median(validPrices);
+      const blended = zestimateVal && zestimateVal > 0 ? med * 0.7 + zestimateVal * 0.3 : med;
+      estimate = {
+        price: Math.round(blended),
+        priceRangeLow: Math.round(validPrices[Math.floor(validPrices.length * 0.1)]),
+        priceRangeHigh: Math.round(validPrices[Math.floor(validPrices.length * 0.9)]),
+      };
+    } else {
+      const avg = validPrices.reduce((s, p) => s + p, 0) / (validPrices.length || 1);
+      estimate = { price: Math.round(avg), priceRangeLow: Math.round(avg * 0.85), priceRangeHigh: Math.round(avg * 1.15) };
+    }
   }
 
-  return {
-    subjectProperty,
-    estimate,
-    soldComparables: filteredSold,
-    activeComparables: filteredActive,
-  };
+  return { subjectProperty, estimate, soldComparables: filteredSold, activeComparables: filteredActive };
 }
 
-/** Map Zillow homeType values to human-readable property type labels */
 function formatHomeTypeAsPropertyType(homeType: string | null): string | null {
   if (!homeType) return null;
   const map: Record<string, string> = {
-    SINGLE_FAMILY: "Single Family",
-    CONDO: "Condo",
-    TOWNHOUSE: "Townhouse",
-    MULTI_FAMILY: "Multi-Family",
-    MANUFACTURED: "Manufactured",
-    APARTMENT: "Apartment",
-    CO_OP: "Co-op",
-    LAND: "Land",
-    MOBILE: "Mobile",
+    SINGLE_FAMILY: "Single Family", CONDO: "Condo", TOWNHOUSE: "Townhouse",
+    MULTI_FAMILY: "Multi-Family", MANUFACTURED: "Manufactured", APARTMENT: "Apartment",
+    CO_OP: "Co-op", LAND: "Land", MOBILE: "Mobile",
   };
   return map[homeType.toUpperCase()] ?? homeType;
 }
 
-/** Compute distance in miles between two coordinate pairs using the Haversine formula */
-function computeDistance(
-  lat1: number | null,
-  lng1: number | null,
-  lat2: number | null,
-  lng2: number | null
-): number | null {
+function recencyWeight(days: number): number { return Math.pow(0.5, days / 90); }
+function distanceWeight(miles?: number): number { return miles == null ? 0.5 : Math.max(0.15, 1 - Math.min(miles, 1.5) / 1.5 * 0.85); }
+function sqftSimilarityWeight(compSqft: number, subjectSqft: number): number {
+  if (!subjectSqft || subjectSqft <= 0) return 0.5;
+  return Math.max(0.1, 1 - Math.abs(compSqft - subjectSqft) / subjectSqft);
+}
+function trimOutliersIQR(values: number[]): number[] {
+  if (values.length < 4) return values;
+  const sorted = [...values].sort((a, b) => a - b);
+  const q1 = sorted[Math.floor(sorted.length * 0.25)];
+  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const iqr = q3 - q1;
+  return sorted.filter((v) => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr);
+}
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  return n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[Math.floor(n / 2)];
+}
+
+function computeDistance(lat1: number | null, lng1: number | null, lat2: number | null, lng2: number | null): number | null {
   if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return null;
-  const R = 3958.8; // Earth radius in miles
+  const R = 3958.8;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.round(R * c * 10) / 10;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 10) / 10;
 }

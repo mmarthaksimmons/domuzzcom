@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,19 @@ export default function CmaPage() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [renovationData, setRenovationData] = useState<RenovationState | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const dispatchProgress = (stage: string, message: string, progress: number) => {
+    window.dispatchEvent(
+      new CustomEvent("compare-progress", {
+        detail: { stage, message, progress },
+      })
+    );
+  };
+
+  const dispatchDone = () => {
+    window.dispatchEvent(new CustomEvent("compare-done"));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,19 +55,63 @@ export default function CmaPage() {
     setAiAnalysis(null);
     setRenovationData(null);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const res = await fetch(
-        `/api/cma?address=${encodeURIComponent(address.trim())}`
+        `/api/cma?address=${encodeURIComponent(address.trim())}`,
+        { signal: controller.signal }
       );
 
-      const data = await res.json();
-
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to generate CMA report");
       }
 
-      setReportData(data);
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+ 
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        let eventType = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            const dataStr = line.slice(6);
+            try {
+              const data = JSON.parse(dataStr);
+              if (eventType === "progress") {
+                dispatchProgress(data.stage, data.message, data.progress);
+              } else if (eventType === "done") {
+                dispatchDone();
+                setReportData({
+                  subjectProperty: data.subjectProperty,
+                  estimate: data.estimate,
+                  soldComparables: data.soldComparables,
+                  activeComparables: data.activeComparables,
+                });
+              } else if (eventType === "error") {
+                throw new Error(data.message ?? "An unexpected error occurred");
+              }
+            } catch (parseErr: any) {
+              if (parseErr?.message && !parseErr.message.includes("JSON")) throw parseErr;
+            }
+          }
+        }
+      }
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setLoading(false);

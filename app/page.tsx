@@ -4,8 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ArrowRight, Scale, FileText, Wrench } from "lucide-react";
+import { ArrowRight, Scale, FileText, PiggyBank } from "lucide-react";
 
 interface ToolCard {
   title: string;
@@ -14,6 +15,7 @@ interface ToolCard {
   icon: React.ComponentType<{ className?: string }>;
   cta: string;
   available: boolean;
+  tags: string[];
 }
 
 const tools: ToolCard[] = [
@@ -25,26 +27,34 @@ const tools: ToolCard[] = [
     icon: Scale,
     cta: "Compare Now",
     available: true,
+    tags: ["Buying"],
   },
   {
-    title: "CMA Report",
+    title: "Free CMA Report",
     description:
       "Generate a Comparative Market Analysis for any US property. Get AI-driven valuation estimates, recent comps, and a printable PDF report.",
     href: "/cma",
     icon: FileText,
     cta: "Run CMA",
     available: true,
+    tags: ["Buying", "Selling"],
   },
   {
-    title: "Renovation ROI",
+    title: "FSBO Saving Calculator",
     description:
-      "Estimate return on investment for common home renovations. See which upgrades add the most value before you spend.",
-    href: "#",
-    icon: Wrench,
-    cta: "Coming Soon",
-    available: false,
+      "See how much you can save by selling your home without an agent. Calculate commission savings and net proceeds instantly.",
+    href: "/fsbo",
+    icon: PiggyBank,
+    cta: "Calculate Savings",
+    available: true,
+    tags: ["Selling"],
   },
 ];
+
+const TAG_COLORS: Record<string, string> = {
+  Buying: "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  Selling: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+};
 
 export default function HomePage() {
   return (
@@ -101,9 +111,9 @@ export default function HomePage() {
                   !tool.available ? "opacity-60" : ""
                 }`}
               >
-                <CardHeader>
+                <CardHeader className="pb-2">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
                       <Icon className="h-5 w-5" />
                     </div>
                     <CardTitle className="text-base sm:text-lg">{tool.title}</CardTitle>
@@ -111,6 +121,19 @@ export default function HomePage() {
                   <CardDescription className="text-sm leading-relaxed">
                     {tool.description}
                   </CardDescription>
+                  {tool.tags.length > 0 && (
+                    <div className="flex gap-1.5 pt-2">
+                      {tool.tags.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant="outline"
+                          className={TAG_COLORS[tag] ?? ""}
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="mt-auto pt-0">
                   {tool.available ? (

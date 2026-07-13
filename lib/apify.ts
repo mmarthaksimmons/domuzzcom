@@ -1,6 +1,6 @@
 const APIFY_TOKEN = process.env.APIFY_TOKEN!;
 const DETAIL_ACTOR = "maxcopell~zillow-detail-scraper";
-const SEARCH_ACTOR = "maxcopell~zillow-scraper";
+const ZIP_ACTOR = "maxcopell~zillow-zip-search";
 
 /**
  * Scrape Zillow property details using addresses instead of URLs.
@@ -28,56 +28,18 @@ export async function scrapeByAddresses(addresses: string[], maxItems?: number) 
 }
 
 /**
- * Build a Zillow search URL with proper searchQueryState for the search scraper.
- * The URL must contain ?searchQueryState=... with mapBounds, filterState, etc.
- */
-function buildZillowSearchUrl(
-  lat: number,
-  lng: number,
-  isSold: boolean
-): string {
-  // Create a ~5-mile bounding box around the property
-  const delta = 0.07; // roughly 5 miles in lat/lng
-  const west = lng - delta;
-  const east = lng + delta;
-  const south = lat - delta;
-  const north = lat + delta;
-
-  const state: Record<string, unknown> = {
-    pagination: {},
-    isMapVisible: true,
-    mapBounds: { west, east, south, north },
-    filterState: {
-      sort: { value: "globalrelevanceex" },
-    },
-    isListVisible: true,
-  };
-
-  if (isSold) {
-    (state.filterState as Record<string, unknown>).isSold = { value: true };
-  }
-
-  const searchQueryState = encodeURIComponent(JSON.stringify(state));
-  const path = isSold
-    ? "https://www.zillow.com/homes/sold/"
-    : "https://www.zillow.com/homes/for_sale/";
-
-  return `${path}?searchQueryState=${searchQueryState}`;
-}
-
-/**
- * CMA-specific: fetch a subject property via the detail scraper, extract
- * its lat/lng, then use the Zillow search scraper to find nearby sold and
- * active comparables. Returns the combined result set.
+ * CMA: two-phase Apify pipeline using zip-search for both active and sold.
  *
- * The search scraper (maxcopell~zillow-scraper) requires Zillow search
- * URLs with a valid ?searchQueryState=... fragment containing mapBounds,
- * filterState, and isListVisible — see the actor README for details.
+ * Phase 1: detail scraper → subject property (beds/baths/sqft/zip/lat/lng/photo)
+ * Phase 2: zip-search scraper → active for-sale + recently-sold area comps
+ *
+ * Returns { results, soldResults } — sold comps kept separate for two-section UI.
  */
 export async function scrapeCmaComps(address: string) {
   const results: any[] = [];
+  let soldResults: any[] = [];
 
-  // Step 1: get subject property from detail scraper
+  // Phase 1: Subject property
   const detailRes = await fetch(
     `https://api.apify.com/v2/acts/${DETAIL_ACTOR}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&maxItems=1`,
     {
@@ -99,47 +61,62 @@ export async function scrapeCmaComps(address: string) {
   }
   results.push(detailData[0]);
 
-  // Step 2: extract coordinates to scope the area search
   const prop = detailData[0];
-  const lat: number | undefined =
-    prop.latitude ?? prop.lat ?? prop.address?.latitude ?? undefined;
-  const lng: number | undefined =
-    prop.longitude ?? prop.lng ?? prop.address?.longitude ?? undefined;
+  const zipCode: string | undefined =
+    prop.zipcode ?? prop.address?.zipcode ?? prop.addressZipCode ?? undefined;
 
-  // Step 3: if we have coordinates, search for nearby sold + active listings
-  if (lat != null && lng != null) {
-    const searchRequests = [
-      { url: buildZillowSearchUrl(lat, lng, true), label: "sold" },
-      { url: buildZillowSearchUrl(lat, lng, false), label: "active" },
-    ];
-
-    for (const { url, label } of searchRequests) {
-      try {
-        const searchRes = await fetch(
-          `https://api.apify.com/v2/acts/${SEARCH_ACTOR}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&maxItems=25`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              searchUrls: [{ url }],
-              extractionMethod: "PAGINATION_WITH_ZOOM_IN",
-              maxItems: 25,
-            }),
-          }
-        );
-        if (searchRes.ok) {
-          const searchData = (await searchRes.json()) as any[];
-          results.push(...searchData);
-        } else {
-          console.warn(
-            `CMA search scraper failed for ${label}: HTTP ${searchRes.status}`
-          );
+  // Phase 2a: Active for-sale comps via zip-search
+  if (zipCode) {
+    try {
+      const activeRes = await fetch(
+        `https://api.apify.com/v2/acts/${ZIP_ACTOR}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&maxItems=20`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            zipCodes: [zipCode],
+            forSaleByAgent: true,
+            forSaleByOwner: false,
+            forRent: false,
+            sold: false,
+            maxItems: 20,
+          }),
         }
-      } catch (err) {
-        console.warn(`CMA search scraper error for ${label}:`, err);
+      );
+      if (activeRes.ok) {
+        const activeData = (await activeRes.json()) as any[];
+        results.push(...activeData);
+      } else {
+        console.warn(`CMA active zip-search failed: HTTP ${activeRes.status}`);
       }
+    } catch (err) {
+      console.warn("CMA active zip-search error:", err);
+    }
+
+    // Phase 2b: Sold comps via zip-search
+    try {
+      const soldRes = await fetch(
+        `https://api.apify.com/v2/acts/${ZIP_ACTOR}/run-sync-get-dataset-items?token=${APIFY_TOKEN}&maxItems=20`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            zipCodes: [zipCode],
+            sold: true,
+            forSaleByAgent: false,
+            maxItems: 20,
+          }),
+        }
+      );
+      if (soldRes.ok) {
+        soldResults = (await soldRes.json()) as any[];
+      } else {
+        console.warn(`CMA sold zip-search failed: HTTP ${soldRes.status}`);
+      }
+    } catch (err) {
+      console.warn("CMA sold zip-search error:", err);
     }
   }
 
-  return results;
+  return { results, soldResults };
 }

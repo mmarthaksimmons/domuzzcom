@@ -70,6 +70,19 @@ export default function CmaCharts({ reportData }: CmaChartsProps) {
     [allComps]
   );
 
+  const subjectScatter = useMemo(() => {
+    const sp = reportData.subjectProperty;
+    if (!sp.sqft || !reportData.estimate.price) return [];
+    return [
+      {
+        x: sp.sqft,
+        y: reportData.estimate.price,
+        name: "Subject Property",
+        status: "Subject",
+      },
+    ];
+  }, [reportData]);
+
   const compPrices = useMemo(
     () =>
       allComps
@@ -150,7 +163,7 @@ export default function CmaCharts({ reportData }: CmaChartsProps) {
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
-            <ScatterChart margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+              <ScatterChart margin={{ top: 10, right: 10, left: 10, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis
                 dataKey="x"
@@ -175,16 +188,24 @@ export default function CmaCharts({ reportData }: CmaChartsProps) {
                   return [formatPrice(Number(value)), "Price"];
                 }}
               />
-              <Legend />
+              <Legend
+                wrapperStyle={{ paddingTop: 20 }}
+              />
               <Scatter
-                name="Sold/Inactive"
+                name="Sold"
                 data={scatterData.filter((d) => d.status === "Sold")}
-                fill="#16a34a"
+                fill="#dc2626"
               />
               <Scatter
                 name="Active"
                 data={scatterData.filter((d) => d.status === "Active")}
-                fill="#ca8a04"
+                fill="#16a34a"
+              />
+              <Scatter
+                name="Subject"
+                data={subjectScatter}
+                fill="#2563eb"
+                shape="star"
               />
             </ScatterChart>
           </ResponsiveContainer>
