@@ -382,22 +382,20 @@ export function normalizeApifyCmaResponse(
     ? (best.homeType ?? best.propertyType)
     : (hdpHomeType ?? best.homeType ?? best.propertyType);
 
-  // Extract photo: prefer Google Street View (legal), fall back to Zillow
+  // Extract photo: Google Street View Static API (primary), Zillow CDN (fallback)
   let subjectPhoto: string | null = null;
-  if (isDetailSubject) {
-    // Google Street View from originalPhotos or responsivePhotos
-    const op = best.originalPhotos;
-    const rp = best.responsivePhotos;
-    const streetViewUrl =
-      (Array.isArray(op) && op[0]?.mixedSources?.jpeg?.[0]?.url) ||
-      (Array.isArray(op) && op[0]?.url) ||
-      (Array.isArray(rp) && rp[0]?.mixedSources?.jpeg?.[0]?.url) ||
-      (Array.isArray(rp) && rp[0]?.url) ||
-      null;
-    if (streetViewUrl) {
-      subjectPhoto = streetViewUrl;
-    } else {
-      // Fallback: Zillow photo URLs
+
+  // Primary: Google Street View Static API from lat/lng
+  if (subjectLat != null && subjectLng != null) {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (apiKey) {
+      subjectPhoto = `https://maps.googleapis.com/maps/api/streetview?size=800x450&location=${subjectLat},${subjectLng}&key=${apiKey}&source=outdoor`;
+    }
+  }
+
+  // Fallback: Zillow photo URLs (when coordinates are missing or no API key)
+  if (!subjectPhoto) {
+    if (isDetailSubject) {
       const raw = JSON.stringify(best);
       const matches = raw.match(/https?:\/\/photos\.zillowstatic\.com\/[^"\\]+/g);
       if (matches && matches.length > 0) {
@@ -407,9 +405,9 @@ export function normalizeApifyCmaResponse(
           ?? matches.find((u) => u.includes("cc_ft_960"))
           ?? matches[0];
       }
+    } else {
+      subjectPhoto = best.imgSrc ?? best.hdpData?.homeInfo?.photo ?? null;
     }
-  } else {
-    subjectPhoto = best.imgSrc ?? best.hdpData?.homeInfo?.photo ?? null;
   }
 
   const subjectProperty: SubjectSummary = {
