@@ -22,6 +22,21 @@ function joinArray(val: any): string | null {
 }
 
 export function normalize(raw: any): House {
+  const lat: number | null = raw.latitude ?? raw.lat ?? null;
+  const lng: number | null = raw.longitude ?? raw.lng ?? null;
+
+  // Primary: Google Street View Static API, fallback: Zillow CDN
+  let photo: string | null = null;
+  if (lat != null && lng != null) {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (apiKey) {
+      photo = `https://maps.googleapis.com/maps/api/streetview?size=800x450&location=${lat},${lng}&key=${apiKey}&source=outdoor`;
+    }
+  }
+  if (!photo) {
+    photo = raw.hiResImageLink ?? raw.desktopWebHdpImageLink ?? null;
+  }
+
   return {
     address: raw.address?.streetAddress ?? raw.abbreviatedAddress ?? "—",
     price: raw.price ?? null,
@@ -49,9 +64,9 @@ export function normalize(raw: any): House {
     heating: joinArray(raw.resoFacts?.heating) ?? raw.heating ?? null,
     cooling: joinArray(raw.resoFacts?.cooling) ?? raw.cooling ?? null,
     daysOnZillow: raw.daysOnZillow ?? null,
-    photo: raw.hiResImageLink ?? raw.desktopWebHdpImageLink ?? null,
+    photo,
     listingUrl: raw.hdpUrl ? `https://www.zillow.com${raw.hdpUrl}` : "—",
-    lat: raw.latitude ?? raw.lat ?? null,
-    lng: raw.longitude ?? raw.lng ?? null,
+    lat,
+    lng,
   };
 }
