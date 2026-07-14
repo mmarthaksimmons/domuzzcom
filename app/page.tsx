@@ -186,12 +186,17 @@ export default function HomePage() {
                 Compare Properties
               </Link>
             </Button>
-            <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
-              <Link href="/cma">
-                <FileText className="h-4 w-4 mr-2" />
-                Run a Free CMA Report
-              </Link>
-            </Button>
+            <div className="relative w-full sm:w-auto">
+              <Button asChild variant="outline" size="lg" className="w-full">
+                <Link href="/cma">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Run a Free CMA Report
+                </Link>
+              </Button>
+              <span className="absolute -top-2.5 -right-2.5 bg-gradient-to-r from-red-500 to-orange-500 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full leading-tight shadow-md animate-pulse">
+                🔥 Hot
+              </span>
+            </div>
           </div>
         </div>
       </section>

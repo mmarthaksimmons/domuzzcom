@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import CompareTable from "@/components/CompareTable";
 import AiSummary from "@/components/AiSummary";
@@ -83,14 +84,16 @@ export default function CompareResultsPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-3">
           <div className="flex items-center">
-            <Image
-              src="/domuzz_logo.svg"
-              alt="Domuzz - Property Comparison"
-              width={140}
-              height={32}
-              priority
-              className="h-auto w-auto sm:w-[180px]"
-            />
+            <Link href="/">
+              <Image
+                src="/domuzz_logo.svg"
+                alt="Domuzz - Property Comparison"
+                width={140}
+                height={32}
+                priority
+                className="h-auto w-auto sm:w-[180px]"
+              />
+            </Link>
           </div>
           <Button
             variant="link"

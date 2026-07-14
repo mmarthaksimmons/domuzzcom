@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -178,14 +179,16 @@ export default function CompareWizardPage() {
         {/* Header */}
         <div className="text-center mb-8 sm:mb-10">
           <div className="flex justify-center mb-2">
-            <Image
-              src="/domuzz_logo.svg"
-              alt="Domuzz - House Compare Made Easy"
-              width={180}
-              height={41}
-              priority
-              className="h-auto w-auto sm:w-[260px]"
-            />
+            <Link href="/">
+              <Image
+                src="/domuzz_logo.svg"
+                alt="Domuzz - House Compare Made Easy"
+                width={180}
+                height={41}
+                priority
+                className="h-auto w-auto sm:w-[260px]"
+              />
+            </Link>
           </div>
           <p className="text-muted-foreground text-sm sm:text-base">
             Compare up to 3 properties side-by-side and export to CSV

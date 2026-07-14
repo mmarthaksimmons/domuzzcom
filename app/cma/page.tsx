@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -131,14 +132,16 @@ export default function CmaPage() {
       <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
         <div className="text-center mb-8 sm:mb-10">
           <div className="flex justify-center mb-2">
-            <Image
-              src="/domuzz_logo.svg"
-              alt="Domuzz"
-              width={180}
-              height={41}
-              priority
-              className="h-auto w-auto sm:w-[200px]"
-            />
+            <Link href="/">
+              <Image
+                src="/domuzz_logo.svg"
+                alt="Domuzz"
+                width={180}
+                height={41}
+                priority
+                className="h-auto w-auto sm:w-[200px]"
+              />
+            </Link>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold mt-4 mb-2">
             Free CMA Report
