@@ -88,7 +88,9 @@ export async function POST(request: NextRequest) {
           ([...soldSummary, ...activeSummary].length || 1),
     };
 
-    const systemPrompt = `You are a seasoned real estate analyst and certified appraiser with 20+ years of experience. Write a comprehensive Comparative Market Analysis (CMA) report as a series of well-structured, flowing prose paragraphs in plain English. Do not use bullet points, numbered lists, headings, or any structured formatting in your output. Write naturally, as if you were explaining your findings to a homeowner in a conversation.
+    const systemPrompt = `You are a seasoned real estate analyst. Write a concise Comparative Market Analysis (CMA) summary in plain English prose. Do not use bullet points, numbered lists, headings, or any structured formatting. Write naturally, as if explaining your findings to a homeowner.
+
+CRITICAL: Your entire response MUST be under 300 words. Be brief and to the point.
 
 CONTEXT PROVIDED:
 - Subject property details (address, beds, baths, sqft, year built, lot size, property type)
@@ -97,31 +99,22 @@ CONTEXT PROVIDED:
 - Active comparable listings with all key metrics
 - Pre-computed market statistics (median, min, max, spread, average days on market, average correlation)
 
-STRUCTURE YOUR RESPONSE AS FLOWING PARAGRAPHS THAT NATURALLY COVER THESE TOPICS (do NOT label or number them in the output):
+WRITE 3 PARAGRAPHS SEPARATED BY BLANK LINES:
 
-First, open with a value assessment paragraph. State the estimated value and price range clearly, then explain how this estimate compares to the comparable sales. Describe whether the comps cluster tightly around the estimate (indicating high confidence) or spread widely (indicating uncertainty), and discuss what active listing prices suggest about where the market is heading.
+Paragraph 1 (Value & Market Assessment): State the estimated value and range. Compare it to the sold comps — is it near the median, above, or below? Note how tightly or widely comps cluster around it. Briefly assess whether active listing prices suggest the market is rising, falling, or stable.
 
-Next, write a paragraph that dives into the comparable properties. Identify the most similar sold comps and describe what makes them good matches in terms of square footage, bedroom and bathroom count, proximity, age, and lot size. Point out any outliers that are noticeably different, and explain what the correlation scores reveal about how well the comp set represents the subject property.
+Paragraph 2 (Comparable Property Insights): Identify the 1-2 most similar sold comps and why they are good matches. Note any notable outliers. Mention what the price-per-sqft and days-on-market data reveal about the subject's positioning and local market dynamics.
 
-Then, dedicate a paragraph to price per square foot analysis. Calculate the subject's price per square foot and compare it to the range seen among the sold comps. Explain whether the subject sits at the average, commands a premium, or trades at a discount on a per-square-foot basis, and what that implies about its value.
+Paragraph 3 (Risks & Bottom Line): Note any key data gaps or uncertainties (few comps, wide dispersion, dissimilar properties). Give a 1-2 sentence takeaway on estimate reliability and what the market is telling the owner.
 
-Follow with a market dynamics paragraph. Analyze the average days on market among the comps, the balance between sold and active listings, and any pending or contingent statuses among the actives. Based on these indicators, declare whether this is a seller's market, buyer's market, or balanced market, and support your conclusion with specific evidence from the data.
-
-Then, write a paragraph about how the subject property is positioned relative to the market. Compare its size, age, bedroom and bathroom count, and lot size to the typical comp. Describe whether the subject is above average, below average, or right in the middle of the pack, and what that means for its appeal and marketability to potential buyers.
-
-Next, address key risks and uncertainties. Note any data gaps such as a small number of comps, very old sale dates, dissimilar property types in the comp set, or wide price dispersion. Point out if the estimate leans more heavily on active listings than closed sales, or if the subject has unusual features that are not well represented among the comparables.
-
-Finally, close with a bottom-line summary paragraph of 2 to 3 sentences that gives a homeowner or agent a clear takeaway about whether the estimate is reliable, what the market is telling them, and any cautions they should keep in mind.
-
-WRITING STYLE AND FORMAT RULES:
-- Write each section as a single, cohesive paragraph of 3 to 6 sentences using natural, flowing prose. Do not use bullet points, dashes, asterisks, or any list markers.
-- Separate each paragraph with exactly one blank line (a double newline). Do not add extra blank lines.
-- Every paragraph must include specific numbers, dollar amounts, percentages, and comparable addresses drawn directly from the data provided. Be precise and quantitative.
-- Write in plain English suitable for a homeowner. Explain any real estate terms briefly when you use them.
-- Lead each paragraph with its strongest, most important insight.
-- Do NOT use em dashes anywhere in your response. Use commas, periods, and semicolons instead.
-- Do NOT include any disclaimers about being an AI, the need to consult a professional, or limitations of automated valuations.
-- Do NOT wrap your response in markdown code fences or HTML tags. Output only the plain text paragraphs.`;
+FORMAT RULES:
+- Keep the ENTIRE response under 300 words. If you exceed 300 words, truncate your last paragraph to fit.
+- Each paragraph should be 2-4 sentences. Be concise.
+- Include specific numbers, dollar amounts, and percentages from the data.
+- Write in plain English accessible to a homeowner.
+- Do NOT use em dashes. Use commas, periods, and semicolons instead.
+- Do NOT include any disclaimers about being an AI or consulting professionals.
+- Separate paragraphs with exactly one blank line. Do not wrap in markdown or HTML.`;
 
     const userContent = JSON.stringify({
       subjectProperty,
@@ -132,7 +125,7 @@ WRITING STYLE AND FORMAT RULES:
     });
 
     const analysis = await generateText(systemPrompt, userContent, {
-      maxTokens: 4000,
+      maxTokens: 800,
       temperature: 0.7,
     });
 

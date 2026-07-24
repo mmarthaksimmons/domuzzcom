@@ -47,7 +47,22 @@ export async function generateText(
   const text = response.text().trim();
 
   if (!text) {
-    throw new Error("Gemini returned an empty response.");
+    // Log full response for diagnosing empty results
+    const finishReason = response.candidates?.[0]?.finishReason;
+    const safetyRatings = response.candidates?.[0]?.safetyRatings;
+    console.error("Gemini empty response. Finish reason:", finishReason);
+    console.error("Safety ratings:", JSON.stringify(safetyRatings));
+    throw new Error(
+      `Gemini returned an empty response (finish reason: ${finishReason ?? "unknown"}).` +
+      " This may be due to safety filters or the model refusing to answer."
+    );
+  }
+
+  // Log finish reason for monitoring truncation issues
+  const finishReason = response.candidates?.[0]?.finishReason;
+  if (finishReason && finishReason !== "STOP") {
+    console.warn("Gemini response did not finish normally. Finish reason:", finishReason);
+    console.warn("Response truncated at", text.length, "characters. Last 100 chars:", text.slice(-100));
   }
 
   return text;
