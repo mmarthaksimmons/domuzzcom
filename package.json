@@ -10,6 +10,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^7.8.0",
     "@react-pdf/renderer": "^4.5.1",
     "@types/leaflet": "^1.9.21",

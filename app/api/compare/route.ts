@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
     // AI summary (optional — skip if no key set)
     let aiResult = null;
-    if (process.env.OPENROUTER_API_KEY) {
+    if (process.env.GEMINI_API) {
       aiResult = await compareHouses(houses, false, weights ?? {}, userProfile ?? null, noGoFilters ?? null);
     }
 

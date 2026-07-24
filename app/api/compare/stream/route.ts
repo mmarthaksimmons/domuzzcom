@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
 
           // Stage 3: AI comparison
           let aiResult = null;
-          if (process.env.OPENROUTER_API_KEY) {
+          if (process.env.GEMINI_API) {
             emit(controller, "progress", { stage: "ai", message: "Analyzing properties with AI...", progress: 40 });
             if (aborted) return;
 

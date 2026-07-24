@@ -1,4 +1,5 @@
 import { House, NoGoFilters, UserProfile } from "./types";
+import { generateJson } from "./gemini";
 
 export async function compareHouses(
   houses: House[],
@@ -7,19 +8,7 @@ export async function compareHouses(
   userProfile?: UserProfile | null,
   noGoFilters?: NoGoFilters | null
 ) {
-  const model = "~google/gemini-flash-latest";
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY!}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content: `You are a real-estate analyst and financial advisor. Compare the homes objectively, weighting analysis by the user's stated priorities (criterion → weight 1-5).
+  const systemPrompt = `You are a real-estate analyst and financial advisor. Compare the homes objectively, weighting analysis by the user's stated priorities (criterion → weight 1-5).
 
 IMPORTANT — Red Flag Detection:
 For each property, scan the listing data and flag ANY of these warning signs as "redFlags" in the output:
@@ -87,85 +76,24 @@ ${Object.entries(noGoFilters)
     : ""
 }
 
-Return JSON: { summary, perHouse:[{address,pros,cons,score,monthlyEstimate,affordabilityRating,redFlags,firstYearCostEstimate}], recommendation, financialSummary }.`,
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            priorities: weights,
-            houses,
-            userProfile: userProfile ?? null,
-            noGoFilters: noGoFilters ?? null,
-          }),
-        },
-      ],
-      response_format: { type: "json_object" },
-      max_tokens: 16384,
-    }),
+Return JSON: { summary, perHouse:[{address,pros,cons,score,monthlyEstimate,affordabilityRating,redFlags,firstYearCostEstimate}], recommendation, financialSummary }.`;
+
+  const userContent = JSON.stringify({
+    priorities: weights,
+    houses,
+    userProfile: userProfile ?? null,
+    noGoFilters: noGoFilters ?? null,
   });
-  const data = await res.json();
 
-  let content = data.choices[0].message.content;
-
-  // Log the raw response for debugging (more context for truncation issues)
-  console.log("AI raw response (first 500 chars):", content.slice(0, 500));
-  console.log("AI raw response length:", content.length);
-  if (data.choices[0]?.finish_reason) {
-    console.log("AI finish reason:", data.choices[0].finish_reason);
-  }
-
-  // Try to parse as-is first (response_format: json_object should give clean JSON)
   try {
-    return sanitizeAiResult(JSON.parse(content));
-  } catch {
-    // Fall through to extraction
-  }
-
-  // Strip markdown fences if present
-  content = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-
-  // Try parsing after stripping fences
-  try {
-    return sanitizeAiResult(JSON.parse(content));
-  } catch {
-    // Fall through to balanced-brace extraction
-  }
-
-  // Extract JSON object using balanced-brace matching
-  const start = content.indexOf("{");
-  if (start === -1) {
-    throw new Error(`No JSON object found in model response: ${content.slice(0, 200)}`);
-  }
-
-  let depth = 0;
-  let end = -1;
-  for (let i = start; i < content.length; i++) {
-    if (content[i] === "{") depth++;
-    if (content[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        end = i;
-        break;
-      }
-    }
-  }
-
-  if (end === -1) {
-    throw new Error(`Unbalanced JSON braces in model response: ${content.slice(0, 200)}`);
-  }
-
-  const extracted = content.slice(start, end + 1);
-
-  // Try to parse the extracted JSON
-  try {
-    return sanitizeAiResult(JSON.parse(extracted));
-  } catch (parseErr: any) {
-    // Attempt to repair common AI JSON issues before giving up
-    console.error("JSON parse error:", parseErr.message);
-    console.error("Failing JSON (last 300 chars):", extracted.slice(-300));
-    const repaired = repairJson(extracted);
-    console.log("Repaired JSON (last 300 chars):", repaired.slice(-300));
-    return sanitizeAiResult(JSON.parse(repaired));
+    const rawResult = await generateJson(systemPrompt, userContent, {
+      maxTokens: 16384,
+      temperature: 0.3,
+    });
+    return sanitizeAiResult(rawResult);
+  } catch (err) {
+    console.error("Gemini API error:", err);
+    throw err;
   }
 }
 
@@ -263,86 +191,4 @@ function sanitizeAiResult(result: Record<string, unknown>): Record<string, unkno
   }
 
   return out;
-}
-
-/**
- * Repair common JSON formatting issues from LLM output:
- * - Trailing commas before } or ]
- * - Consecutive commas
- * - Missing commas between properties
- * - Truncated output with "..."
- * - Unterminated string values (close them before closing brackets)
- */
-function repairJson(json: string): string {
-  let repaired = json
-    // Remove trailing commas before } or ]
-    .replace(/,(\s*[}\]])/g, "$1")
-    // Remove consecutive commas
-    .replace(/,\s*,/g, ",")
-    // Fix "..." truncation from AI
-    .replace(/"\.\.\.",?/g, '""')
-    .replace(/\.\.\.\s*$/, "")
-    // Fix unescaped newlines in string values (common in AI output)
-    .replace(/(?<!\\)\n/g, "\\n");
-
-  // If the JSON ends abruptly (missing closing brackets), close them
-  // First, detect unterminated string (odd number of quotes before the end)
-  let inString = false;
-  let escaped = false;
-  let lastStringQuotePos = -1;
-
-  for (let i = 0; i < repaired.length; i++) {
-    const ch = repaired[i];
-    if (escaped) { escaped = false; continue; }
-    if (ch === "\\") { escaped = true; continue; }
-    if (ch === '"') {
-      inString = !inString;
-      if (!inString) lastStringQuotePos = i; // closed a string
-    }
-  }
-
-  // If we're still inside a string at EOF, close it
-  let needsStringClosure = inString;
-  if (needsStringClosure) {
-    // Find the last comma before the unterminated string to remove any trailing partial content
-    const lastComma = repaired.lastIndexOf(",");
-    const lastBracket = Math.max(
-      repaired.lastIndexOf("}"),
-      repaired.lastIndexOf("]")
-    );
-    const lastColon = repaired.lastIndexOf(":");
-    // The unterminated string started after the last structural character
-    const clipPos = Math.max(lastComma, lastBracket, lastColon);
-    if (clipPos > lastStringQuotePos) {
-      // Remove the partial/incomplete value and replace it with an empty string
-      repaired = repaired.slice(0, clipPos + 1) + '""';
-      needsStringClosure = false; // we patched it
-    } else {
-      // No safe clipping point — just close the string with an empty value
-      repaired += '": ""';
-      needsStringClosure = false;
-    }
-  }
-
-  // Now count bracket depth
-  let openBraces = 0;
-  let openBrackets = 0;
-  inString = false;
-  escaped = false;
-
-  for (const ch of repaired) {
-    if (escaped) { escaped = false; continue; }
-    if (ch === "\\") { escaped = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (ch === "{") openBraces++;
-    if (ch === "}") openBraces--;
-    if (ch === "[") openBrackets++;
-    if (ch === "]") openBrackets--;
-  }
-
-  if (openBrackets > 0) repaired += "]".repeat(openBrackets);
-  if (openBraces > 0) repaired += "}".repeat(openBraces);
-
-  return repaired;
 }
