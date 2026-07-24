@@ -125,11 +125,16 @@ FORMAT RULES:
     });
 
     const analysis = await generateText(systemPrompt, userContent, {
-      maxTokens: 800,
       temperature: 0.7,
     });
 
-    return NextResponse.json({ analysis });
+    // Safety net: truncate to ~300 words in case the model exceeds the limit
+    const words = analysis.split(/\s+/);
+    const truncatedAnalysis = words.length > 300
+      ? words.slice(0, 300).join(" ") + "."
+      : analysis;
+
+    return NextResponse.json({ analysis: truncatedAnalysis });
   } catch (error) {
     console.error("CMA analysis API error:", error);
     return NextResponse.json(
