@@ -30,19 +30,28 @@ function correlationPercent(c: number): string {
   return `${Math.round(c * 100)}%`;
 }
 
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 function statusBadge(comparable: Comparable) {
   if (comparable.isSold) {
+    const label = comparable.soldDate ? `Sold ${formatDate(comparable.soldDate)}` : "Sold";
     return (
-      <Badge variant="outline" className="border-red-400 text-red-600 gap-1 pl-1.5">
+      <Badge variant="outline" className="border-red-400 text-red-600 gap-1 pl-1.5 text-xs whitespace-nowrap">
         <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-        Sold
+        {label}
       </Badge>
     );
   }
+  const label = comparable.listedDate ? `Listed ${formatDate(comparable.listedDate)}` : "Active";
   return (
-    <Badge variant="outline" className="border-green-400 text-green-600 gap-1 pl-1.5">
+    <Badge variant="outline" className="border-green-400 text-green-600 gap-1 pl-1.5 text-xs whitespace-nowrap">
       <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-      Active
+      {label}
     </Badge>
   );
 }
@@ -338,7 +347,7 @@ export default function CmaReport({
 
       {/* Sold Comparables */}
       <ComparableSection
-        title={`Recently Sold Properties (${soldComparables.length}) — closed sales`}
+        title={`Recently Sold Properties (${soldComparables.length})`}
         comparables={soldComparables}
         formatPrice={formatPrice}
         formatNumber={formatNumber}
@@ -348,7 +357,7 @@ export default function CmaReport({
 
       {/* Active Listings */}
       <ComparableSection
-        title={`Active Listings (${activeComparables.length}) — currently for sale`}
+        title={`Active Listings (${activeComparables.length})`}
         comparables={activeComparables}
         formatPrice={formatPrice}
         formatNumber={formatNumber}

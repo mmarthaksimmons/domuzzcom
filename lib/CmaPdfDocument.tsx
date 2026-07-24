@@ -276,7 +276,7 @@ export function CmaPdfDocument({ reportData, aiAnalysis, renovationData }: CmaPd
         {soldComparables.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>
-              Recently Sold Properties ({soldComparables.length}) — closed sales
+              Recently Sold Properties ({soldComparables.length}) — Sold
             </Text>
             <View style={styles.table}>
               <View style={styles.tableHeader}>
@@ -296,7 +296,9 @@ export function CmaPdfDocument({ reportData, aiAnalysis, renovationData }: CmaPd
                   <Text style={[styles.tdText, styles.colAddr]}>{comp.address}</Text>
                   <Text style={[styles.tdText, styles.colType]}>{comp.propertyType ?? "—"}</Text>
                   <View style={styles.colStatus}>
-                    <Text style={styles.soldBadge}>Sold</Text>
+                    <Text style={styles.soldBadge}>
+                      {comp.soldDate ? `Sold ${new Date(comp.soldDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : "Sold"}
+                    </Text>
                   </View>
                   <Text style={[styles.tdText, styles.colPrice]}>{formatPrice(comp.price)}</Text>
                   <Text style={[styles.tdText, styles.colBeds]}>{comp.beds}</Text>
@@ -315,7 +317,7 @@ export function CmaPdfDocument({ reportData, aiAnalysis, renovationData }: CmaPd
         {activeComparables.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>
-              Active Listings ({activeComparables.length}) — currently for sale
+              Active Listings ({activeComparables.length}) — Active
             </Text>
             <View style={styles.table}>
               <View style={styles.tableHeader}>
@@ -335,7 +337,9 @@ export function CmaPdfDocument({ reportData, aiAnalysis, renovationData }: CmaPd
                   <Text style={[styles.tdText, styles.colAddr]}>{comp.address}</Text>
                   <Text style={[styles.tdText, styles.colType]}>{comp.propertyType ?? "—"}</Text>
                   <View style={styles.colStatus}>
-                    <Text style={styles.activeBadge}>Active</Text>
+                    <Text style={styles.activeBadge}>
+                      {comp.listedDate ? `Listed ${new Date(comp.listedDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : "Active"}
+                    </Text>
                   </View>
                   <Text style={[styles.tdText, styles.colPrice]}>{formatPrice(comp.price)}</Text>
                   <Text style={[styles.tdText, styles.colBeds]}>{comp.beds}</Text>

@@ -73,6 +73,10 @@ export interface Comparable {
   isSold: boolean;
   latitude: number | null;
   longitude: number | null;
+  /** Date the property was listed (ISO string) */
+  listedDate: string | null;
+  /** Date the property was sold/closed (ISO string) */
+  soldDate: string | null;
 }
 
 /** Subject property summary */
@@ -156,6 +160,7 @@ export function filterComparables(
   const active: Comparable[] = [];
 
   for (const comp of sorted) {
+    const isSold = isSoldStatus(comp.status);
     const normalized: Comparable = {
       address: comp.formattedAddress,
       status: comp.status || "Unknown",
@@ -169,9 +174,11 @@ export function filterComparables(
       distance: comp.distance ?? null,
       daysOnMarket: comp.daysOnMarket ?? null,
       correlation: comp.correlation,
-      isSold: isSoldStatus(comp.status),
+      isSold,
       latitude: comp.latitude ?? null,
       longitude: comp.longitude ?? null,
+      listedDate: comp.listedDate ?? null,
+      soldDate: isSold ? (comp.removedDate ?? comp.lastSeenDate ?? null) : null,
     };
 
     if (normalized.isSold) {
@@ -316,6 +323,17 @@ function parseRawComparable(
 
   const dist = computeDistance(subjectLat, subjectLng, compLat, compLng);
 
+  // Extract dates for Apify detail and search scraper schemas
+  let compListedDate: string | null = null;
+  let compSoldDate: string | null = null;
+  if (isDetail) {
+    compListedDate = raw.datePosted ?? raw.listingDate ?? null;
+    compSoldDate = raw.dateSold ?? raw.lastSoldDate ?? null;
+  } else {
+    compListedDate = raw.hdpData?.homeInfo?.datePosted ?? null;
+    compSoldDate = raw.hdpData?.homeInfo?.dateSold ?? null;
+  }
+
   return {
     address: compAddress || "—",
     status: compStatus ?? (isSold ? "Sold" : "Active"),
@@ -332,6 +350,8 @@ function parseRawComparable(
     isSold,
     latitude: compLat,
     longitude: compLng,
+    listedDate: compListedDate,
+    soldDate: compSoldDate,
   };
 }
 
@@ -508,6 +528,8 @@ export function normalizeApifyCmaResponse(
         isSold: true,
         latitude: compLat,
         longitude: compLng,
+        listedDate: null,
+        soldDate: raw.hdpData?.homeInfo?.dateSold ?? null,
       });
     }
   }
