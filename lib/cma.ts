@@ -294,9 +294,18 @@ function parseRawComparable(
   const compYearBuilt: number | null = isDetail
     ? raw.yearBuilt
     : (hdpType ? raw.hdpData?.homeInfo?.yearBuilt : null) ?? null;
-  const compLotSize: number | null = isDetail
-    ? (raw.lotAreaValue ?? raw.lotSize)
-    : null;
+  let compLotSize: number | null = null;
+  if (isDetail) {
+    const rawLotValue = raw.lotAreaValue ?? raw.lotSize;
+    if (rawLotValue != null) {
+      const lotUnits: string | undefined = raw.lotAreaUnits;
+      if (lotUnits === "Acres") {
+        compLotSize = Number(rawLotValue) * 43560;
+      } else {
+        compLotSize = Number(rawLotValue);
+      }
+    }
+  }
 
   const compLat: number | null = isDetail
     ? (raw.latitude ?? raw.lat)
@@ -392,9 +401,18 @@ export function normalizeApifyCmaResponse(
   const subjectSqft: number | null = isDetailSubject
     ? (best.livingArea ?? best.livingAreaValue ?? null)
     : (best.area ?? null);
-  const subjectLotSize: number | null = isDetailSubject
-    ? (best.lotAreaValue ?? best.lotSize ?? null)
-    : null;
+  let subjectLotSize: number | null = null;
+  if (isDetailSubject) {
+    const rawLotValue = best.lotAreaValue ?? best.lotSize;
+    if (rawLotValue != null) {
+      const lotUnits: string | undefined = best.lotAreaUnits;
+      if (lotUnits === "Acres") {
+        subjectLotSize = Number(rawLotValue) * 43560;
+      } else {
+        subjectLotSize = Number(rawLotValue);
+      }
+    }
+  }
   const subjectYearBuilt: number | null = best.yearBuilt ?? null;
 
   const hdpHomeType = best.hdpData?.homeInfo?.homeType;
