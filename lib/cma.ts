@@ -98,6 +98,8 @@ export interface EstimateRange {
   price: number;
   priceRangeLow: number;
   priceRangeHigh: number;
+  /** Confidence level based on tight-tier comp count */
+  confidence?: "low" | "medium" | "high";
 }
 
 /** Full CMA report data */
@@ -553,9 +555,11 @@ export function normalizeApifyCmaResponse(
   }
 
   // ---- Score + filter ----
+  // Correlation based on property characteristics (beds, baths, sqft,
+  // distance) plus demand signals (sold status, DOM). Price deviation
+  // from the raw median is NOT penalized because comps in different
+  // price tiers can still be excellent matches.
   const allCompsUnsorted = [...soldComparables, ...activeComparables];
-  const allPrices = allCompsUnsorted.map((c) => c.price).sort((a, b) => a - b);
-  const rawMedian = allPrices.length > 0 ? allPrices[Math.floor(allPrices.length / 2)] : 0;
 
   for (const comp of allCompsUnsorted) {
     let score = 1.0;
@@ -569,13 +573,19 @@ export function normalizeApifyCmaResponse(
       else score -= sqftRatio * 0.15;
     }
     if (comp.distance != null) score -= comp.distance * 0.05;
-    if (rawMedian > 0 && comp.price > 0) {
-      const priceRatio = Math.abs(comp.price - rawMedian) / rawMedian;
-      if (priceRatio > 5.0) score -= 0.6;
-      else if (priceRatio > 2.0) score -= 0.35;
-      else if (priceRatio > 1.0) score -= 0.15;
-      else if (priceRatio > 0.5) score -= 0.05;
+
+    // Sold comps are stronger signals than active listings — they represent
+    // real transactions, not aspirational asking prices.
+    if (comp.isSold) score += 0.05;
+
+    // Fast sales indicate strong demand. Very low DOM (≤7 days) at a sold
+    // price confirms the market supports that price level.
+    if (comp.isSold && comp.daysOnMarket != null && comp.daysOnMarket <= 7) {
+      score += 0.04;
+    } else if (comp.isSold && comp.daysOnMarket != null && comp.daysOnMarket <= 14) {
+      score += 0.02;
     }
+
     comp.correlation = Math.max(0, Math.min(1, Math.round(score * 100) / 100));
   }
 
@@ -600,57 +610,132 @@ export function normalizeApifyCmaResponse(
   const filteredActive = scoredActive;
 
   // ---- Compute estimate from filtered comps ----
-  const compsWithSqft = allCompsScored.filter((c) => c.price > 0 && c.sqft > 0);
-  const pricesForEstimate = compsWithSqft.map((c) => c.price);
+  // Tiered comp selection: prefer tight (close + high-correlation) comps.
+  // Falls back through wider tiers when tight comps are scarce.
+  const TIGHT_MIN_CORRELATION = 0.70;
+  const TIGHT_MAX_DISTANCE_MILES = 2.0;
+  const ESTIMATE_COMP_LIMIT = 6;
   const zestimateVal: number | null = best.zestimate ?? null;
+
+  // Helper: filter comps to those with usable price + sqft
+  const usable = (c: Comparable) => c.price > 0 && c.sqft > 0;
+
+  // ---- Build tight comp set ----
+  const tightComps = allCompsScored
+    .filter((c) => usable(c) && c.correlation >= TIGHT_MIN_CORRELATION && c.distance != null && c.distance <= TIGHT_MAX_DISTANCE_MILES)
+    .sort((a, b) => {
+      // Sold before active, then correlation descending
+      if (a.isSold !== b.isSold) return a.isSold ? -1 : 1;
+      return b.correlation - a.correlation;
+    });
+
+  let selectedComps: Comparable[];
+  let tightCount: number;
+
+  if (tightComps.length >= 3) {
+    // Tight tier: enough comps — use only these, capped
+    selectedComps = tightComps.slice(0, ESTIMATE_COMP_LIMIT);
+    tightCount = tightComps.length;
+  } else if (tightComps.length >= 1) {
+    // Sparse tight tier: widen to 3.5 mi + 0.55 correlation, merge
+    const WIDENED_CORRELATION = 0.55;
+    const WIDENED_DISTANCE = 3.5;
+    const widenedComps = allCompsScored
+      .filter((c) => usable(c) && c.correlation >= WIDENED_CORRELATION && c.distance != null && c.distance <= WIDENED_DISTANCE)
+      .sort((a, b) => {
+        if (a.isSold !== b.isSold) return a.isSold ? -1 : 1;
+        return (a.distance ?? 99) - (b.distance ?? 99);
+      });
+    selectedComps = widenedComps.slice(0, ESTIMATE_COMP_LIMIT);
+    tightCount = tightComps.length;
+  } else {
+    // No tight comps: fall back to top-by-correlation from full set
+    console.warn("CMA: Low-confidence estimate — no tight comps found (correlation >= 0.70 within 2.0 mi)");
+    selectedComps = allCompsScored
+      .filter(usable)
+      .sort((a, b) => b.correlation - a.correlation)
+      .slice(0, ESTIMATE_COMP_LIMIT);
+    tightCount = 0;
+  }
+
+  // ---- Outlier filtering on selected tier (BEFORE cap) ----
+  const pricePerSqftValues = selectedComps.map((c) => c.price / c.sqft);
+  const trimmedPricePerSqft = trimOutliersIQR(pricePerSqftValues, 2.0);
+  const validPricePerSqftSet = new Set(trimmedPricePerSqft);
+  const validComps = trimmedPricePerSqft.length >= 3
+    ? selectedComps.filter((c) => validPricePerSqftSet.has(c.price / c.sqft))
+    : selectedComps;
+  const validPrices = validComps.map((c) => c.price).sort((a, b) => a - b);
+
+  // ---- Compute estimate ----
   let estimate: EstimateRange;
 
-  if (pricesForEstimate.length === 0) {
-    estimate = { price: 0, priceRangeLow: 0, priceRangeHigh: 0 };
-  } else {
-    const trimmedPrices = trimOutliersIQR(pricesForEstimate);
-    const validPrices = trimmedPrices.length >= 3 ? trimmedPrices : pricesForEstimate;
-
-    if (validPrices.length >= 4 && subjectSqft && subjectSqft > 0) {
-      const scoredComps = compsWithSqft
-        .filter((c) => validPrices.includes(c.price))
-        .map((c) => ({
-          price: c.price,
-          compositeWeight:
-            recencyWeight(c.daysOnMarket ?? 365) * 0.2 +
-            distanceWeight(c.distance ?? undefined) * 0.15 +
-            sqftSimilarityWeight(c.sqft, subjectSqft!) * 0.35 +
-            c.correlation * 0.3,
-        }));
-      const sortedByPrice = [...scoredComps].sort((a, b) => a.price - b.price);
-      const totalWeight = sortedByPrice.reduce((s, e) => s + e.compositeWeight, 0);
-      let cumWeight = 0;
-      let weightedMedian = sortedByPrice[0].price;
-      for (const sc of sortedByPrice) {
-        cumWeight += sc.compositeWeight;
-        if (cumWeight >= totalWeight / 2) { weightedMedian = sc.price; break; }
-      }
-      const avgPrice = validPrices.reduce((s, p) => s + p, 0) / validPrices.length;
-      const blended = zestimateVal && zestimateVal > 0
-        ? weightedMedian * 0.45 + avgPrice * 0.25 + zestimateVal * 0.3
-        : weightedMedian * 0.6 + avgPrice * 0.4;
-      estimate = {
-        price: Math.round(blended),
-        priceRangeLow: Math.round(validPrices[Math.floor(validPrices.length * 0.1)]),
-        priceRangeHigh: Math.round(validPrices[Math.floor(validPrices.length * 0.9)]),
-      };
-    } else if (validPrices.length >= 3) {
-      const med = median(validPrices);
-      const blended = zestimateVal && zestimateVal > 0 ? med * 0.7 + zestimateVal * 0.3 : med;
-      estimate = {
-        price: Math.round(blended),
-        priceRangeLow: Math.round(validPrices[Math.floor(validPrices.length * 0.1)]),
-        priceRangeHigh: Math.round(validPrices[Math.floor(validPrices.length * 0.9)]),
-      };
-    } else {
-      const avg = validPrices.reduce((s, p) => s + p, 0) / (validPrices.length || 1);
-      estimate = { price: Math.round(avg), priceRangeLow: Math.round(avg * 0.85), priceRangeHigh: Math.round(avg * 1.15) };
+  if (validComps.length === 0) {
+    estimate = { price: 0, priceRangeLow: 0, priceRangeHigh: 0, confidence: "low" };
+  } else if (validComps.length >= 4 && subjectSqft && subjectSqft > 0) {
+    // Weighted blend with sold-status multiplier
+    const scoredComps = validComps
+      .map((c) => {
+        const baseWeight =
+          recencyWeight(c.daysOnMarket ?? 365) * 0.15 +
+          distanceWeight(c.distance ?? undefined) * 0.20 +
+          sqftSimilarityWeight(c.sqft, subjectSqft!) * 0.25 +
+          c.correlation * c.correlation * 0.30;
+        // Sold comps carry more weight than active listings (asking prices)
+        const soldMultiplier = c.isSold ? 1.15 : 0.85;
+        return { price: c.price, compositeWeight: baseWeight * soldMultiplier };
+      });
+    const sortedByPrice = [...scoredComps].sort((a, b) => a.price - b.price);
+    const totalWeight = sortedByPrice.reduce((s, e) => s + e.compositeWeight, 0);
+    let cumWeight = 0;
+    let weightedMedian = sortedByPrice[0].price;
+    for (const sc of sortedByPrice) {
+      cumWeight += sc.compositeWeight;
+      if (cumWeight >= totalWeight / 2) { weightedMedian = sc.price; break; }
     }
+    const avgPrice = validPrices.reduce((s, p) => s + p, 0) / validPrices.length;
+    const blended = zestimateVal && zestimateVal > 0
+      ? weightedMedian * 0.50 + avgPrice * 0.30 + zestimateVal * 0.20
+      : weightedMedian * 0.6 + avgPrice * 0.4;
+
+    let priceRangeLow = Math.round(validPrices[Math.floor(validPrices.length * 0.1)]);
+    let priceRangeHigh = Math.round(validPrices[Math.floor(validPrices.length * 0.9)]);
+
+    // ---- Confidence & range sanity ----
+    let confidence: "low" | "medium" | "high";
+    if (tightCount >= 5) confidence = "high";
+    else if (tightCount >= 3) confidence = "medium";
+    else confidence = "low";
+
+    const roundedPrice = Math.round(blended);
+    // If range spans > 90% of point estimate, comp pool is too heterogeneous
+    if (roundedPrice > 0 && (priceRangeHigh - priceRangeLow) / roundedPrice > 0.9) {
+      priceRangeLow = Math.round(validPrices[Math.floor(validPrices.length * 0.25)]);
+      priceRangeHigh = Math.round(validPrices[Math.floor(validPrices.length * 0.75)]);
+    }
+
+    estimate = { price: roundedPrice, priceRangeLow, priceRangeHigh, confidence };
+  } else if (validComps.length >= 3) {
+    const med = median(validPrices);
+    const blended = zestimateVal && zestimateVal > 0 ? med * 0.80 + zestimateVal * 0.20 : med;
+    let confidence: "low" | "medium" | "high";
+    if (tightCount >= 5) confidence = "high";
+    else if (tightCount >= 3) confidence = "medium";
+    else confidence = "low";
+    estimate = {
+      price: Math.round(blended),
+      priceRangeLow: Math.round(validPrices[Math.floor(validPrices.length * 0.1)]),
+      priceRangeHigh: Math.round(validPrices[Math.floor(validPrices.length * 0.9)]),
+      confidence,
+    };
+  } else {
+    const avg = validPrices.reduce((s, p) => s + p, 0) / (validPrices.length || 1);
+    estimate = {
+      price: Math.round(avg),
+      priceRangeLow: Math.round(avg * 0.85),
+      priceRangeHigh: Math.round(avg * 1.15),
+      confidence: "low",
+    };
   }
 
   return { subjectProperty, estimate, soldComparables: filteredSold, activeComparables: filteredActive };
@@ -672,13 +757,13 @@ function sqftSimilarityWeight(compSqft: number, subjectSqft: number): number {
   if (!subjectSqft || subjectSqft <= 0) return 0.5;
   return Math.max(0.1, 1 - Math.abs(compSqft - subjectSqft) / subjectSqft);
 }
-function trimOutliersIQR(values: number[]): number[] {
+function trimOutliersIQR(values: number[], fenceMultiplier: number = 1.5): number[] {
   if (values.length < 4) return values;
   const sorted = [...values].sort((a, b) => a - b);
   const q1 = sorted[Math.floor(sorted.length * 0.25)];
   const q3 = sorted[Math.floor(sorted.length * 0.75)];
   const iqr = q3 - q1;
-  return sorted.filter((v) => v >= q1 - 1.5 * iqr && v <= q3 + 1.5 * iqr);
+  return sorted.filter((v) => v >= q1 - fenceMultiplier * iqr && v <= q3 + fenceMultiplier * iqr);
 }
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
