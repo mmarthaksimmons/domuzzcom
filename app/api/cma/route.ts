@@ -3,9 +3,13 @@ import { checkRateLimit, getClientIP } from "@/lib/rate-limit";
 import { scrapeCmaComps } from "@/lib/apify";
 import { normalizeApifyCmaResponse } from "@/lib/cma";
 import { generateAddressSlug } from "@/lib/utils";
+import { CMAReportData } from "@/lib/cma";
 
 export const maxDuration = 300;
 export const runtime = "nodejs";
+
+/** Serve a cached report if it was updated within this many milliseconds. */
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 let cmaTableEnsured = false;
 
@@ -28,6 +32,29 @@ async function ensureCmaTable() {
     cmaTableEnsured = true;
   } catch (err) {
     console.error("Failed to ensure cma_reports table:", err);
+  }
+}
+
+async function getCachedReport(slug: string): Promise<{
+  address: string;
+  reportData: CMAReportData;
+} | null> {
+  try {
+    const { getPrisma } = await import("@/lib/prisma");
+    const prisma = getPrisma();
+    await ensureCmaTable();
+    const report = await prisma.cmaReport.findUnique({ where: { slug } });
+    if (!report) return null;
+
+    const age = Date.now() - report.updatedAt.getTime();
+    if (age > CACHE_TTL_MS) return null; // expired
+
+    return {
+      address: report.address,
+      reportData: report.reportData as unknown as CMAReportData,
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -117,7 +144,30 @@ export async function GET(request: NextRequest) {
 
       try {
         const fullAddress = address.trim();
+        const slug = generateAddressSlug(fullAddress);
 
+        // ── Cache check ──────────────────────────────────────────
+        const cached = await getCachedReport(slug);
+        if (cached && !aborted) {
+          emit(controller, "progress", {
+            stage: "detail",
+            message: "Serving cached report...",
+            progress: 50,
+          });
+          emit(controller, "progress", {
+            stage: "estimate",
+            message: "Report ready",
+            progress: 100,
+          });
+          emit(controller, "done", {
+            slug,
+            ...cached.reportData,
+          });
+          controller.close();
+          return;
+        }
+
+        // ── Fresh scrape ─────────────────────────────────────────
         // Stage 1: Subject property lookup
         emit(controller, "progress", {
           stage: "detail",
@@ -158,10 +208,7 @@ export async function GET(request: NextRequest) {
         );
         if (aborted) return;
 
-        // Persist the report to Neon. Use the user's original full address
-        // for the slug and stored address — the scraped subjectProperty.address
-        // is often just the street name (e.g. "1610 GLADIOLAS DRIVE").
-        const slug = generateAddressSlug(fullAddress);
+        // Persist the report to Neon.
         const reportPayload = {
           subjectProperty: normalized.subjectProperty,
           estimate: normalized.estimate,
