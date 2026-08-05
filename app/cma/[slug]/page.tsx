@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, notFound } from "next/navigation";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -20,6 +20,18 @@ interface CmaReportResponse {
   reportData: CMAReportData;
   aiAnalysis: string | null;
   createdAt: string;
+}
+
+const THREE_MONTHS_MS = 3 * 30 * 24 * 60 * 60 * 1000;
+
+function formatReportDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
 export default function CmaReportPermalinkPage() {
@@ -63,6 +75,15 @@ export default function CmaReportPermalinkPage() {
     return () => { cancelled = true; };
   }, [slug]);
 
+  const canRegenerate = useMemo(() => {
+    if (!report?.createdAt) return false;
+    const age = Date.now() - new Date(report.createdAt).getTime();
+    return age >= THREE_MONTHS_MS;
+  }, [report?.createdAt]);
+
+  const reportDate = report?.createdAt ? formatReportDate(report.createdAt) : null;
+  const regenerateUrl = report ? `/cma?address=${encodeURIComponent(report.address)}` : "/cma";
+
   if (!slug) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center">
@@ -92,9 +113,16 @@ export default function CmaReportPermalinkPage() {
             CMA Report
           </h1>
           {report ? (
-            <p className="text-base sm:text-lg font-medium text-foreground mb-1">
-              {report.address}
-            </p>
+            <>
+              <p className="text-base sm:text-lg font-medium text-foreground mb-1">
+                {report.address}
+              </p>
+              {reportDate && (
+                <p className="text-sm text-muted-foreground mb-1">
+                  Generated on {reportDate}
+                </p>
+              )}
+            </>
           ) : null}
           <p className="text-muted-foreground text-sm sm:text-base max-w-lg mx-auto">
             Get an instant Comparative Market Analysis for any US property.
@@ -143,10 +171,23 @@ export default function CmaReportPermalinkPage() {
               </Card>
             )}
 
-            <div className="mt-8 flex justify-center items-center gap-3">
+            <div className="mt-8 flex justify-center items-center gap-3 flex-wrap">
               <Link href="/cma">
                 <Button variant="outline" size="lg">
                   ← Generate New Report
+                </Button>
+              </Link>
+              <Link href={regenerateUrl}>
+                <Button
+                  size="lg"
+                  disabled={!canRegenerate}
+                  title={
+                    canRegenerate
+                      ? "Regenerate this report with fresh data"
+                      : "You can regenerate this report 3 months after it was generated"
+                  }
+                >
+                  🔄 Regenerate CMA Report
                 </Button>
               </Link>
               <a
