@@ -16,9 +16,33 @@ interface CmaReportRow {
   createdAt: string;
 }
 
+let cmaTableEnsured = false;
+
+async function ensureCmaTable() {
+  if (cmaTableEnsured) return;
+  try {
+    const prisma = getPrisma();
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS cma_reports (
+        id TEXT PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
+        address TEXT NOT NULL,
+        report_data JSONB NOT NULL,
+        ai_analysis TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    cmaTableEnsured = true;
+  } catch {
+    // Table may already exist — ignore.
+  }
+}
+
 async function getReport(slug: string): Promise<CmaReportRow | null> {
   try {
     const prisma = getPrisma();
+    await ensureCmaTable();
     const report = await prisma.cmaReport.findUnique({
       where: { slug },
     });
