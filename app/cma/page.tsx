@@ -29,6 +29,7 @@ export default function CmaPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reportData, setReportData] = useState<CMAReportData | null>(null);
+  const [reportSlug, setReportSlug] = useState<string | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [renovationData, setRenovationData] = useState<RenovationState | null>(null);
@@ -53,6 +54,7 @@ export default function CmaPage() {
     setLoading(true);
     setError(null);
     setReportData(null);
+    setReportSlug(null);
     setAiAnalysis(null);
     setRenovationData(null);
 
@@ -96,6 +98,7 @@ export default function CmaPage() {
                 dispatchProgress(data.stage, data.message, data.progress);
               } else if (eventType === "done") {
                 dispatchDone();
+                if (data.slug) setReportSlug(data.slug as string);
                 setReportData({
                   subjectProperty: data.subjectProperty,
                   estimate: data.estimate,
@@ -206,6 +209,20 @@ export default function CmaPage() {
             <CmaCharts reportData={reportData} />
             <CmaAiAnalysis reportData={reportData} onAnalysisReady={handleAnalysisReady} />
             <RenovationAdjustments baseEstimate={reportData.estimate.price} onChange={handleRenovationChange} />
+
+            {reportSlug && (
+              <div className="mt-4 flex justify-center">
+                <p className="text-sm text-muted-foreground">
+                  Permalink:{" "}
+                  <Link
+                    href={`/cma/${reportSlug}`}
+                    className="text-primary underline underline-offset-2 hover:text-primary/80"
+                  >
+                    domuzz.com/cma/{reportSlug}
+                  </Link>
+                </p>
+              </div>
+            )}
 
             <div className="mt-8 flex justify-center items-center gap-3">
               <a

@@ -2,9 +2,35 @@ import { NextRequest } from "next/server";
 import { checkRateLimit, getClientIP } from "@/lib/rate-limit";
 import { scrapeCmaComps } from "@/lib/apify";
 import { normalizeApifyCmaResponse } from "@/lib/cma";
+import { generateAddressSlug } from "@/lib/utils";
 
 export const maxDuration = 300;
 export const runtime = "nodejs";
+
+async function saveCmaReport(
+  slug: string,
+  address: string,
+  reportData: Record<string, unknown>
+) {
+  try {
+    const { getPrisma } = await import("@/lib/prisma");
+    const prisma = getPrisma();
+    await prisma.cmaReport.upsert({
+      where: { slug },
+      update: {
+        reportData: reportData as any,
+        address,
+      },
+      create: {
+        slug,
+        address,
+        reportData: reportData as any,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to save CMA report:", err);
+  }
+}
 
 function emit(
   controller: ReadableStreamDefaultController,
@@ -105,14 +131,25 @@ export async function GET(request: NextRequest) {
         );
         if (aborted) return;
 
+        // Persist the report to Neon so it's accessible via permalink
+        const slug = generateAddressSlug(normalized.subjectProperty.address);
+        const reportPayload = {
+          subjectProperty: normalized.subjectProperty,
+          estimate: normalized.estimate,
+          soldComparables: normalized.soldComparables,
+          activeComparables: normalized.activeComparables,
+        };
+        saveCmaReport(slug, normalized.subjectProperty.address, reportPayload);
+
         emit(controller, "progress", {
           stage: "estimate",
           message: "Estimate computed",
           progress: 90,
         });
 
-        // Send final result
+        // Send final result (includes slug for permalink)
         emit(controller, "done", {
+          slug,
           soldComparables: normalized.soldComparables,
           activeComparables: normalized.activeComparables,
           subjectProperty: normalized.subjectProperty,

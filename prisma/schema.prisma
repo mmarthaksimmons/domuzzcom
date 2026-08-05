@@ -17,3 +17,15 @@ model Lead {
 
   @@map("leads")
 }
+
+model CmaReport {
+  id         String   @id @default(cuid())
+  slug       String   @unique
+  address    String
+  reportData Json     @map("report_data")
+  aiAnalysis String?  @map("ai_analysis")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("cma_reports")
+}
