@@ -188,6 +188,16 @@ export function CmaPdfDocument({ reportData, aiAnalysis, renovationData }: CmaPd
           <Text style={{ fontSize: 6, color: "#6b7280", marginTop: 4, textAlign: "center" }}>
             Computed from {allComparables.length} comparable listings using a weighted blend of size-adjusted price-per-square-foot and statistical median, with outlier filtering for accuracy.
           </Text>
+          {estimate.confidence === "low" && (
+            <View style={{ marginTop: 8, backgroundColor: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 4, padding: 8 }}>
+              <Text style={{ fontSize: 8, fontWeight: 700, color: "#92400e", marginBottom: 2 }}>
+                ⚠ Low Confidence Estimate
+              </Text>
+              <Text style={{ fontSize: 6.5, color: "#a16207", lineHeight: 1.4 }}>
+                No highly-correlated comparable properties were found within a close radius of this property. The estimate above is based on the best available data but should be treated as a rough approximation. A professional appraisal is recommended for more accurate valuation.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Market Overview */}
