@@ -1,18 +1,39 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CMAReportData } from "@/lib/cma";
 import CmaReport from "@/components/CmaReport";
 
 const CmaMap = dynamic(() => import("@/components/CmaMap"), { ssr: false });
 const CmaCharts = dynamic(() => import("@/components/CmaCharts"), { ssr: false });
 
-interface Props {
+interface ServerProps {
+  address: string;
+  reportData: CMAReportData;
+  aiAnalysis: string | null;
+  createdAt: string;
+  slug?: never;
+}
+
+interface FallbackProps {
+  slug: string;
+  address?: never;
+  reportData?: never;
+  aiAnalysis?: never;
+  createdAt?: never;
+}
+
+type Props = ServerProps | FallbackProps;
+
+interface CmaReportResponse {
+  slug: string;
   address: string;
   reportData: CMAReportData;
   aiAnalysis: string | null;
@@ -31,34 +52,104 @@ function formatReportDate(iso: string): string {
   });
 }
 
-/** Convert "1562 ARBOR PARK DRIVE" → "1562 Arbor Park Drive" */
 function toTitleCase(str: string): string {
   return str.replace(/\b\w+/g, (word) => {
-    // Keep numbers intact, capitalize first letter of words
     if (/^\d+$/.test(word)) return word;
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   });
 }
 
-export default function CmaReportPermalinkClient({
-  address,
-  reportData,
-  aiAnalysis,
-  createdAt,
-}: Props) {
+export default function CmaReportPermalinkClient(props: Props) {
+  const slug = "slug" in props ? props.slug : undefined;
+  const [fetched, setFetched] = useState<CmaReportResponse | null>(null);
+  const [loading, setLoading] = useState(!!slug);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+
+    async function fetchReport() {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/cma/report/${encodeURIComponent(slug!)}`);
+        if (res.status === 404) {
+          if (!cancelled) notFound();
+          return;
+        }
+        if (!res.ok) throw new Error("Failed to load report");
+        const data: CmaReportResponse = await res.json();
+        if (!cancelled) setFetched(data);
+      } catch (err: unknown) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "An error occurred");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchReport();
+    return () => { cancelled = true; };
+  }, [slug]);
+
+  const address = "address" in props ? props.address : fetched?.address ?? "";
+  const reportData = "reportData" in props ? props.reportData : fetched?.reportData ?? null;
+  const aiAnalysis = "aiAnalysis" in props ? props.aiAnalysis : fetched?.aiAnalysis ?? null;
+  const createdAt = "createdAt" in props ? props.createdAt : fetched?.createdAt ?? "";
+
   const canRegenerate = useMemo(() => {
+    if (!createdAt) return false;
     const age = Date.now() - new Date(createdAt).getTime();
     return age >= THREE_MONTHS_MS;
   }, [createdAt]);
 
-  const reportDate = formatReportDate(createdAt);
-  const displayAddress = toTitleCase(address);
-  const regenerateUrl = `/cma?address=${encodeURIComponent(address)}`;
+  const reportDate = createdAt ? formatReportDate(createdAt) : null;
+  const displayAddress = toTitleCase(address || "");
+  const regenerateUrl = address ? `/cma?address=${encodeURIComponent(address)}` : "/cma";
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
+          <Card className="mb-8">
+            <CardContent className="py-12 space-y-4">
+              <Skeleton className="h-8 w-3/4 mx-auto" />
+              <Skeleton className="h-4 w-1/2 mx-auto" />
+              <Skeleton className="h-64 w-full" />
+              <Skeleton className="h-48 w-full" />
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
+          <Card className="mb-8 border-destructive/50 bg-destructive/5">
+            <CardContent className="py-4">
+              <p className="text-sm text-destructive">{error}</p>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    );
+  }
+
+  if (!reportData) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
+          <p className="text-center text-muted-foreground">Report data unavailable.</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
-        {/* Header */}
         <div className="text-center mb-8 sm:mb-10">
           <div className="flex justify-center mb-2">
             <Link href="/">
@@ -78,9 +169,11 @@ export default function CmaReportPermalinkClient({
           <h1 className="text-xl sm:text-2xl font-bold mb-1">
             CMA Report
           </h1>
-          <p className="text-sm text-muted-foreground mb-1">
-            Generated on {reportDate}
-          </p>
+          {reportDate && (
+            <p className="text-sm text-muted-foreground mb-1">
+              Generated on {reportDate}
+            </p>
+          )}
           <p className="text-muted-foreground text-sm sm:text-base max-w-lg mx-auto">
             Get an instant Comparative Market Analysis for any US property.
             Powered by real market data — no agent required.

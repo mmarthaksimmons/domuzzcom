@@ -1,5 +1,4 @@
 import { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { getPrisma } from "@/lib/prisma";
 import { CMAReportData } from "@/lib/cma";
 import CmaReportPermalinkClient from "@/components/CmaReportPermalinkClient";
@@ -55,6 +54,7 @@ async function getReport(slug: string): Promise<CmaReportRow | null> {
       createdAt: report.createdAt.toISOString(),
     };
   } catch {
+    // Prisma failed — let the client fetch via API instead
     return null;
   }
 }
@@ -68,7 +68,7 @@ export async function generateMetadata({
   const report = await getReport(slug);
 
   if (!report) {
-    return { title: "CMA Report Not Found | Domuzz" };
+    return { title: "CMA Report | Domuzz" };
   }
 
   const address = report.address;
@@ -122,54 +122,55 @@ export default async function CmaReportPermalinkPage({
   params: Promise<PageParams>;
 }) {
   const { slug } = await params;
+
+  // Try server-side fetch first, fall back to client-side API call
   const report = await getReport(slug);
 
-  if (!report) {
-    notFound();
+  if (report) {
+    // Server-side data available — full SSR with JSON-LD
+    const { address, reportData, aiAnalysis, createdAt } = report;
+    const estimate = reportData.estimate;
+    const priceFormatted = estimate.price > 0 ? estimate.price : undefined;
+    const jsonLd = {
+      "@context": "https://schema.org",
+      "@type": "RealEstateListing",
+      name: `CMA Report for ${address}`,
+      description: `Comparative Market Analysis for ${address}. Estimated value range: $${estimate.priceRangeLow.toLocaleString()} – $${estimate.priceRangeHigh.toLocaleString()}.`,
+      url: `https://www.domuzz.com/cma/${slug}`,
+      datePosted: createdAt,
+      about: {
+        "@type": "Place",
+        name: address,
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: address,
+        },
+      },
+      ...(priceFormatted && {
+        offers: {
+          "@type": "Offer",
+          price: priceFormatted,
+          priceCurrency: "USD",
+        },
+      }),
+    };
+
+    return (
+      <>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+        <CmaReportPermalinkClient
+          address={address}
+          reportData={reportData}
+          aiAnalysis={aiAnalysis}
+          createdAt={createdAt}
+        />
+      </>
+    );
   }
 
-  const { address, reportData, aiAnalysis, createdAt } = report;
-  const estimate = reportData.estimate;
-
-  // Build JSON-LD structured data for the property
-  const priceFormatted =
-    estimate.price > 0 ? estimate.price : undefined;
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "RealEstateListing",
-    name: `CMA Report for ${address}`,
-    description: `Comparative Market Analysis for ${address}. Estimated value range: $${estimate.priceRangeLow.toLocaleString()} – $${estimate.priceRangeHigh.toLocaleString()}.`,
-    url: `https://www.domuzz.com/cma/${slug}`,
-    datePosted: createdAt,
-    about: {
-      "@type": "Place",
-      name: address,
-      address: {
-        "@type": "PostalAddress",
-        streetAddress: address,
-      },
-    },
-    ...(priceFormatted && {
-      offers: {
-        "@type": "Offer",
-        price: priceFormatted,
-        priceCurrency: "USD",
-      },
-    }),
-  };
-
-  return (
-    <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <CmaReportPermalinkClient
-        address={address}
-        reportData={reportData}
-        aiAnalysis={aiAnalysis}
-        createdAt={createdAt}
-      />
-    </>
-  );
+  // Prisma unavailable — let the client fetch via API route
+  return <CmaReportPermalinkClient slug={slug} />;
 }
