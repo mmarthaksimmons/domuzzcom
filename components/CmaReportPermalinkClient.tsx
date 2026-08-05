@@ -31,6 +31,15 @@ function formatReportDate(iso: string): string {
   });
 }
 
+/** Convert "1562 ARBOR PARK DRIVE" → "1562 Arbor Park Drive" */
+function toTitleCase(str: string): string {
+  return str.replace(/\b\w+/g, (word) => {
+    // Keep numbers intact, capitalize first letter of words
+    if (/^\d+$/.test(word)) return word;
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+}
+
 export default function CmaReportPermalinkClient({
   address,
   reportData,
@@ -43,6 +52,7 @@ export default function CmaReportPermalinkClient({
   }, [createdAt]);
 
   const reportDate = formatReportDate(createdAt);
+  const displayAddress = toTitleCase(address);
   const regenerateUrl = `/cma?address=${encodeURIComponent(address)}`;
 
   return (
@@ -62,8 +72,11 @@ export default function CmaReportPermalinkClient({
               />
             </Link>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold mt-4 mb-2">
-            {address} — CMA Report
+          <p className="text-lg sm:text-xl font-semibold text-foreground mt-4 mb-1">
+            {displayAddress}
+          </p>
+          <h1 className="text-xl sm:text-2xl font-bold mb-1">
+            CMA Report
           </h1>
           <p className="text-sm text-muted-foreground mb-1">
             Generated on {reportDate}
