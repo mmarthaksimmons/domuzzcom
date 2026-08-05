@@ -91,6 +91,11 @@ export default function CmaReportPermalinkPage() {
           <h1 className="text-2xl sm:text-3xl font-bold mt-4 mb-2">
             CMA Report
           </h1>
+          {report ? (
+            <p className="text-base sm:text-lg font-medium text-foreground mb-1">
+              {report.reportData.subjectProperty.address}
+            </p>
+          ) : null}
           <p className="text-muted-foreground text-sm sm:text-base">
             Comparative Market Analysis
           </p>
