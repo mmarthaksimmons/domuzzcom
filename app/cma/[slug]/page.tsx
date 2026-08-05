@@ -93,11 +93,12 @@ export default function CmaReportPermalinkPage() {
           </h1>
           {report ? (
             <p className="text-base sm:text-lg font-medium text-foreground mb-1">
-              {report.reportData.subjectProperty.address}
+              {report.address}
             </p>
           ) : null}
-          <p className="text-muted-foreground text-sm sm:text-base">
-            Comparative Market Analysis
+          <p className="text-muted-foreground text-sm sm:text-base max-w-lg mx-auto">
+            Get an instant Comparative Market Analysis for any US property.
+            Powered by real market data — no agent required.
           </p>
         </div>
 

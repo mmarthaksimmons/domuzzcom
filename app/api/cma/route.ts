@@ -116,6 +116,8 @@ export async function GET(request: NextRequest) {
       request.signal.addEventListener("abort", abortHandler);
 
       try {
+        const fullAddress = address.trim();
+
         // Stage 1: Subject property lookup
         emit(controller, "progress", {
           stage: "detail",
@@ -125,7 +127,7 @@ export async function GET(request: NextRequest) {
         if (aborted) return;
 
         const { results: rawResults, soldResults: rawSold } =
-          await scrapeCmaComps(address.trim());
+          await scrapeCmaComps(fullAddress);
         if (aborted) return;
 
         emit(controller, "progress", {
@@ -150,21 +152,23 @@ export async function GET(request: NextRequest) {
         });
 
         const normalized = normalizeApifyCmaResponse(
-          address.trim(),
+          fullAddress,
           rawResults,
           rawSold
         );
         if (aborted) return;
 
-        // Persist the report to Neon so it's accessible via permalink
-        const slug = generateAddressSlug(normalized.subjectProperty.address);
+        // Persist the report to Neon. Use the user's original full address
+        // for the slug and stored address — the scraped subjectProperty.address
+        // is often just the street name (e.g. "1610 GLADIOLAS DRIVE").
+        const slug = generateAddressSlug(fullAddress);
         const reportPayload = {
           subjectProperty: normalized.subjectProperty,
           estimate: normalized.estimate,
           soldComparables: normalized.soldComparables,
           activeComparables: normalized.activeComparables,
         };
-        saveCmaReport(slug, normalized.subjectProperty.address, reportPayload);
+        saveCmaReport(slug, fullAddress, reportPayload);
 
         emit(controller, "progress", {
           stage: "estimate",
