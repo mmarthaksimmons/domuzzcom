@@ -1,20 +1,14 @@
-"use client";
-
-import { useState, useEffect, useMemo } from "react";
-import { useParams, notFound } from "next/navigation";
-import dynamic from "next/dynamic";
-import Image from "next/image";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { getPrisma } from "@/lib/prisma";
 import { CMAReportData } from "@/lib/cma";
-import CmaReport from "@/components/CmaReport";
+import CmaReportPermalinkClient from "@/components/CmaReportPermalinkClient";
 
-const CmaMap = dynamic(() => import("@/components/CmaMap"), { ssr: false });
-const CmaCharts = dynamic(() => import("@/components/CmaCharts"), { ssr: false });
+interface PageParams {
+  slug: string;
+}
 
-interface CmaReportResponse {
+interface CmaReportRow {
   slug: string;
   address: string;
   reportData: CMAReportData;
@@ -22,193 +16,136 @@ interface CmaReportResponse {
   createdAt: string;
 }
 
-const THREE_MONTHS_MS = 3 * 30 * 24 * 60 * 60 * 1000;
-
-function formatReportDate(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+async function getReport(slug: string): Promise<CmaReportRow | null> {
+  try {
+    const prisma = getPrisma();
+    const report = await prisma.cmaReport.findUnique({
+      where: { slug },
+    });
+    if (!report) return null;
+    return {
+      slug: report.slug,
+      address: report.address,
+      reportData: report.reportData as unknown as CMAReportData,
+      aiAnalysis: report.aiAnalysis,
+      createdAt: report.createdAt.toISOString(),
+    };
+  } catch {
+    return null;
+  }
 }
 
-export default function CmaReportPermalinkPage() {
-  const params = useParams<{ slug: string }>();
-  const slug = params?.slug;
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<PageParams>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const report = await getReport(slug);
 
-  const [report, setReport] = useState<CmaReportResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!slug) return;
-
-    let cancelled = false;
-
-    async function fetchReport() {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await fetch(`/api/cma/report/${encodeURIComponent(slug)}`);
-        if (res.status === 404) {
-          if (!cancelled) notFound();
-          return;
-        }
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to load report");
-        }
-        const data: CmaReportResponse = await res.json();
-        if (!cancelled) setReport(data);
-      } catch (err: unknown) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "An error occurred");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    fetchReport();
-    return () => { cancelled = true; };
-  }, [slug]);
-
-  const canRegenerate = useMemo(() => {
-    if (!report?.createdAt) return false;
-    const age = Date.now() - new Date(report.createdAt).getTime();
-    return age >= THREE_MONTHS_MS;
-  }, [report?.createdAt]);
-
-  const reportDate = report?.createdAt ? formatReportDate(report.createdAt) : null;
-  const regenerateUrl = report ? `/cma?address=${encodeURIComponent(report.address)}` : "/cma";
-
-  if (!slug) {
-    return (
-      <main className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Invalid report URL.</p>
-      </main>
-    );
+  if (!report) {
+    return { title: "CMA Report Not Found | Domuzz" };
   }
 
+  const address = report.address;
+  const estimate = report.reportData.estimate;
+  const price =
+    estimate.price > 0
+      ? new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          maximumFractionDigits: 0,
+        }).format(estimate.price)
+      : null;
+
+  const title = `${address} — Free CMA Report | Domuzz`;
+  const description = price
+    ? `Free Comparative Market Analysis for ${address}. Estimated value: ${price}. See sold comparables, market trends, and property insights — no agent required.`
+    : `Free Comparative Market Analysis for ${address}. See estimated value, sold comparables, market trends, and property insights — no agent required.`;
+
+  const url = `https://www.domuzz.com/cma/${slug}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: "Domuzz",
+      type: "website",
+      images: [
+        {
+          url: "https://www.domuzz.com/domuzz_logo.svg",
+          width: 800,
+          height: 182,
+          alt: "Domuzz — Free CMA Reports",
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  };
+}
+
+export default async function CmaReportPermalinkPage({
+  params,
+}: {
+  params: Promise<PageParams>;
+}) {
+  const { slug } = await params;
+  const report = await getReport(slug);
+
+  if (!report) {
+    notFound();
+  }
+
+  const { address, reportData, aiAnalysis, createdAt } = report;
+  const estimate = reportData.estimate;
+
+  // Build JSON-LD structured data for the property
+  const priceFormatted =
+    estimate.price > 0 ? estimate.price : undefined;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "RealEstateListing",
+    name: `CMA Report for ${address}`,
+    description: `Comparative Market Analysis for ${address}. Estimated value range: $${estimate.priceRangeLow.toLocaleString()} – $${estimate.priceRangeHigh.toLocaleString()}.`,
+    url: `https://www.domuzz.com/cma/${slug}`,
+    datePosted: createdAt,
+    about: {
+      "@type": "Place",
+      name: address,
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: address,
+      },
+    },
+    ...(priceFormatted && {
+      offers: {
+        "@type": "Offer",
+        price: priceFormatted,
+        priceCurrency: "USD",
+      },
+    }),
+  };
+
   return (
-    <main className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
-        {/* Header */}
-        <div className="text-center mb-8 sm:mb-10">
-          <div className="flex justify-center mb-2">
-            <Link href="/">
-              <Image
-                src="/domuzz_logo.svg"
-                alt="Domuzz"
-                width={180}
-                height={41}
-                priority
-                className="h-auto w-auto sm:w-[200px]"
-              />
-            </Link>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold mt-4 mb-2">
-            CMA Report
-          </h1>
-          {report ? (
-            <>
-              <p className="text-base sm:text-lg font-medium text-foreground mb-1">
-                {report.address}
-              </p>
-              {reportDate && (
-                <p className="text-sm text-muted-foreground mb-1">
-                  Generated on {reportDate}
-                </p>
-              )}
-            </>
-          ) : null}
-          <p className="text-muted-foreground text-sm sm:text-base max-w-lg mx-auto">
-            Get an instant Comparative Market Analysis for any US property.
-            Powered by real market data — no agent required.
-          </p>
-        </div>
-
-        {/* Loading state */}
-        {loading && (
-          <Card className="mb-8">
-            <CardContent className="py-12 space-y-4">
-              <Skeleton className="h-8 w-3/4 mx-auto" />
-              <Skeleton className="h-4 w-1/2 mx-auto" />
-              <Skeleton className="h-64 w-full" />
-              <Skeleton className="h-48 w-full" />
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Error state */}
-        {error && (
-          <Card className="mb-8 border-destructive/50 bg-destructive/5">
-            <CardContent className="py-4">
-              <p className="text-sm text-destructive">{error}</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Report content */}
-        {report && !loading && (
-          <>
-            <CmaReport reportData={report.reportData} />
-            <CmaMap reportData={report.reportData} />
-            <CmaCharts reportData={report.reportData} />
-
-            {report.aiAnalysis && (
-              <Card className="mb-8">
-                <CardHeader>
-                  <CardTitle className="text-lg">AI Market Analysis</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="prose prose-sm max-w-none text-muted-foreground whitespace-pre-line">
-                    {report.aiAnalysis}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <div className="mt-8 flex justify-center items-center gap-3 flex-wrap">
-              <Link href="/cma">
-                <Button variant="outline" size="lg">
-                  ← Generate New Report
-                </Button>
-              </Link>
-              <Link href={regenerateUrl}>
-                <Button
-                  size="lg"
-                  disabled={!canRegenerate}
-                  title={
-                    canRegenerate
-                      ? "Regenerate this report with fresh data"
-                      : "You can regenerate this report 3 months after it was generated"
-                  }
-                >
-                  🔄 Regenerate CMA Report
-                </Button>
-              </Link>
-              <a
-                href="https://buymeacoffee.com/domuzzcom"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-[#FFDD00] text-[#000000] hover:bg-[#FFDD00]/90 h-10 px-8"
-              >
-                ☕ Buy me a coffee
-              </a>
-            </div>
-          </>
-        )}
-
-        <p className="mt-12 text-center text-[11px] sm:text-xs text-muted-foreground px-2">
-          This estimate is generated by an automated valuation model (AVM) using
-          public and listing data. It is not a formal appraisal. Consult a
-          licensed appraiser for financing decisions. Data sourced from public
-          records and listing data.
-        </p>
-      </div>
-    </main>
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <CmaReportPermalinkClient
+        address={address}
+        reportData={reportData}
+        aiAnalysis={aiAnalysis}
+        createdAt={createdAt}
+      />
+    </>
   );
 }
