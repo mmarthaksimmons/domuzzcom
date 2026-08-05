@@ -7,6 +7,30 @@ import { generateAddressSlug } from "@/lib/utils";
 export const maxDuration = 300;
 export const runtime = "nodejs";
 
+let cmaTableEnsured = false;
+
+async function ensureCmaTable() {
+  if (cmaTableEnsured) return;
+  try {
+    const { getPrisma } = await import("@/lib/prisma");
+    const prisma = getPrisma();
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS cma_reports (
+        id TEXT PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
+        address TEXT NOT NULL,
+        report_data JSONB NOT NULL,
+        ai_analysis TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    cmaTableEnsured = true;
+  } catch (err) {
+    console.error("Failed to ensure cma_reports table:", err);
+  }
+}
+
 async function saveCmaReport(
   slug: string,
   address: string,
@@ -15,6 +39,7 @@ async function saveCmaReport(
   try {
     const { getPrisma } = await import("@/lib/prisma");
     const prisma = getPrisma();
+    await ensureCmaTable();
     await prisma.cmaReport.upsert({
       where: { slug },
       update: {
