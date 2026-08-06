@@ -14,24 +14,6 @@ import CmaReport from "@/components/CmaReport";
 const CmaMap = dynamic(() => import("@/components/CmaMap"), { ssr: false });
 const CmaCharts = dynamic(() => import("@/components/CmaCharts"), { ssr: false });
 
-interface ServerProps {
-  address: string;
-  reportData: CMAReportData;
-  aiAnalysis: string | null;
-  createdAt: string;
-  slug?: never;
-}
-
-interface FallbackProps {
-  slug: string;
-  address?: never;
-  reportData?: never;
-  aiAnalysis?: never;
-  createdAt?: never;
-}
-
-type Props = ServerProps | FallbackProps;
-
 interface CmaReportResponse {
   slug: string;
   address: string;
@@ -59,29 +41,33 @@ function toTitleCase(str: string): string {
   });
 }
 
-export default function CmaReportPermalinkClient(props: Props) {
-  const slug = "slug" in props ? props.slug : undefined;
-  const [fetched, setFetched] = useState<CmaReportResponse | null>(null);
-  const [loading, setLoading] = useState(!!slug);
+export default function CmaReportPermalinkClient({ slug }: { slug: string }) {
+  const [report, setReport] = useState<CmaReportResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!slug) return;
     let cancelled = false;
 
     async function fetchReport() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/cma/report/${encodeURIComponent(slug!)}`);
+        setError(null);
+        const res = await fetch(`/api/cma/report/${encodeURIComponent(slug)}`);
         if (res.status === 404) {
           if (!cancelled) notFound();
           return;
         }
-        if (!res.ok) throw new Error("Failed to load report");
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Failed to load report");
+        }
         const data: CmaReportResponse = await res.json();
-        if (!cancelled) setFetched(data);
+        if (!cancelled) setReport(data);
       } catch (err: unknown) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "An error occurred");
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "An error occurred");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -91,20 +77,17 @@ export default function CmaReportPermalinkClient(props: Props) {
     return () => { cancelled = true; };
   }, [slug]);
 
-  const address = "address" in props ? props.address : fetched?.address ?? "";
-  const reportData = "reportData" in props ? props.reportData : fetched?.reportData ?? null;
-  const aiAnalysis = "aiAnalysis" in props ? props.aiAnalysis : fetched?.aiAnalysis ?? null;
-  const createdAt = "createdAt" in props ? props.createdAt : fetched?.createdAt ?? "";
-
   const canRegenerate = useMemo(() => {
-    if (!createdAt) return false;
-    const age = Date.now() - new Date(createdAt).getTime();
+    if (!report?.createdAt) return false;
+    const age = Date.now() - new Date(report.createdAt).getTime();
     return age >= THREE_MONTHS_MS;
-  }, [createdAt]);
+  }, [report?.createdAt]);
 
-  const reportDate = createdAt ? formatReportDate(createdAt) : null;
-  const displayAddress = toTitleCase(address || "");
-  const regenerateUrl = address ? `/cma?address=${encodeURIComponent(address)}` : "/cma";
+  const reportDate = report?.createdAt ? formatReportDate(report.createdAt) : null;
+  const displayAddress = toTitleCase(report?.address ?? "");
+  const regenerateUrl = report?.address
+    ? `/cma?address=${encodeURIComponent(report.address)}`
+    : "/cma";
 
   if (loading) {
     return (
@@ -137,7 +120,7 @@ export default function CmaReportPermalinkClient(props: Props) {
     );
   }
 
-  if (!reportData) {
+  if (!report) {
     return (
       <main className="min-h-screen bg-background">
         <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
@@ -180,18 +163,18 @@ export default function CmaReportPermalinkClient(props: Props) {
           </p>
         </div>
 
-        <CmaReport reportData={reportData} />
-        <CmaMap reportData={reportData} />
-        <CmaCharts reportData={reportData} />
+        <CmaReport reportData={report.reportData} />
+        <CmaMap reportData={report.reportData} />
+        <CmaCharts reportData={report.reportData} />
 
-        {aiAnalysis && (
+        {report.aiAnalysis && (
           <Card className="mb-8">
             <CardHeader>
               <CardTitle className="text-lg">AI Market Analysis</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="prose prose-sm max-w-none text-muted-foreground whitespace-pre-line">
-                {aiAnalysis}
+                {report.aiAnalysis}
               </div>
             </CardContent>
           </Card>
