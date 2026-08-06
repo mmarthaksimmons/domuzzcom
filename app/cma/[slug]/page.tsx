@@ -1,62 +1,8 @@
 import { Metadata } from "next";
-import { getPrisma } from "@/lib/prisma";
-import { CMAReportData } from "@/lib/cma";
 import CmaReportPermalinkClient from "@/components/CmaReportPermalinkClient";
 
 interface PageParams {
   slug: string;
-}
-
-interface CmaReportRow {
-  slug: string;
-  address: string;
-  reportData: CMAReportData;
-  aiAnalysis: string | null;
-  createdAt: string;
-}
-
-let cmaTableEnsured = false;
-
-async function ensureCmaTable() {
-  if (cmaTableEnsured) return;
-  try {
-    const prisma = getPrisma();
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS cma_reports (
-        id TEXT PRIMARY KEY,
-        slug TEXT UNIQUE NOT NULL,
-        address TEXT NOT NULL,
-        report_data JSONB NOT NULL,
-        ai_analysis TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-    `);
-    cmaTableEnsured = true;
-  } catch {
-    // Table may already exist — ignore.
-  }
-}
-
-async function getReport(slug: string): Promise<CmaReportRow | null> {
-  try {
-    const prisma = getPrisma();
-    await ensureCmaTable();
-    const report = await prisma.cmaReport.findUnique({
-      where: { slug },
-    });
-    if (!report) return null;
-    return {
-      slug: report.slug,
-      address: report.address,
-      reportData: report.reportData as unknown as CMAReportData,
-      aiAnalysis: report.aiAnalysis,
-      createdAt: report.createdAt.toISOString(),
-    };
-  } catch {
-    // Prisma failed — let the client fetch via API instead
-    return null;
-  }
 }
 
 export async function generateMetadata({
@@ -65,53 +11,30 @@ export async function generateMetadata({
   params: Promise<PageParams>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const report = await getReport(slug);
 
-  if (!report) {
-    return { title: "CMA Report | Domuzz" };
-  }
+  // Decode the slug back to a readable address for the title
+  const readable = slug
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 
-  const address = report.address;
-  const estimate = report.reportData.estimate;
-  const price =
-    estimate.price > 0
-      ? new Intl.NumberFormat("en-US", {
-          style: "currency",
-          currency: "USD",
-          maximumFractionDigits: 0,
-        }).format(estimate.price)
-      : null;
-
-  const title = `${address} — Free CMA Report | Domuzz`;
-  const description = price
-    ? `Free Comparative Market Analysis for ${address}. Estimated value: ${price}. See sold comparables, market trends, and property insights — no agent required.`
-    : `Free Comparative Market Analysis for ${address}. See estimated value, sold comparables, market trends, and property insights — no agent required.`;
-
+  const title = `${readable} — Free CMA Report | Domuzz`;
   const url = `https://www.domuzz.com/cma/${slug}`;
 
   return {
     title,
-    description,
+    description: `Free Comparative Market Analysis for ${readable}. See estimated value, sold comparables, and market trends — no agent required.`,
     alternates: { canonical: url },
     openGraph: {
       title,
-      description,
+      description: `Free Comparative Market Analysis for ${readable}. See estimated value, sold comparables, and market trends.`,
       url,
       siteName: "Domuzz",
       type: "website",
-      images: [
-        {
-          url: "https://www.domuzz.com/domuzz_logo.svg",
-          width: 800,
-          height: 182,
-          alt: "Domuzz — Free CMA Reports",
-        },
-      ],
     },
     twitter: {
       card: "summary_large_image",
       title,
-      description,
     },
   };
 }
@@ -122,55 +45,5 @@ export default async function CmaReportPermalinkPage({
   params: Promise<PageParams>;
 }) {
   const { slug } = await params;
-
-  // Try server-side fetch first, fall back to client-side API call
-  const report = await getReport(slug);
-
-  if (report) {
-    // Server-side data available — full SSR with JSON-LD
-    const { address, reportData, aiAnalysis, createdAt } = report;
-    const estimate = reportData.estimate;
-    const priceFormatted = estimate.price > 0 ? estimate.price : undefined;
-    const jsonLd = {
-      "@context": "https://schema.org",
-      "@type": "RealEstateListing",
-      name: `CMA Report for ${address}`,
-      description: `Comparative Market Analysis for ${address}. Estimated value range: $${estimate.priceRangeLow.toLocaleString()} – $${estimate.priceRangeHigh.toLocaleString()}.`,
-      url: `https://www.domuzz.com/cma/${slug}`,
-      datePosted: createdAt,
-      about: {
-        "@type": "Place",
-        name: address,
-        address: {
-          "@type": "PostalAddress",
-          streetAddress: address,
-        },
-      },
-      ...(priceFormatted && {
-        offers: {
-          "@type": "Offer",
-          price: priceFormatted,
-          priceCurrency: "USD",
-        },
-      }),
-    };
-
-    return (
-      <>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
-        <CmaReportPermalinkClient
-          address={address}
-          reportData={reportData}
-          aiAnalysis={aiAnalysis}
-          createdAt={createdAt}
-        />
-      </>
-    );
-  }
-
-  // Prisma unavailable — let the client fetch via API route
   return <CmaReportPermalinkClient slug={slug} />;
 }
