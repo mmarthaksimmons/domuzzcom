@@ -2,15 +2,15 @@
 
 import { useState, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { useParams, notFound } from "next/navigation";
+import { useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CMAReportData } from "@/lib/cma";
-import CmaReport from "@/components/CmaReport";
+import type { CMAReportData } from "@/lib/cma";
 
+const CmaReport = dynamic(() => import("@/components/CmaReport"), { ssr: false });
 const CmaMap = dynamic(() => import("@/components/CmaMap"), { ssr: false });
 const CmaCharts = dynamic(() => import("@/components/CmaCharts"), { ssr: false });
 
@@ -47,6 +47,7 @@ export default function CmaReportPermalinkPage() {
 
   const [report, setReport] = useState<CmaReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,9 +58,10 @@ export default function CmaReportPermalinkPage() {
       try {
         setLoading(true);
         setError(null);
+        setNotFound(false);
         const res = await fetch(`/api/cma/report/${encodeURIComponent(slug)}`);
         if (res.status === 404) {
-          if (!cancelled) notFound();
+          if (!cancelled) setNotFound(true);
           return;
         }
         if (!res.ok) {
@@ -93,10 +95,26 @@ export default function CmaReportPermalinkPage() {
     ? `/cma?address=${encodeURIComponent(report.address)}`
     : "/cma";
 
+  // Decode slug for display when report isn't loaded yet
+  const slugDisplay = slug
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
   if (loading) {
     return (
       <main className="min-h-screen bg-background">
         <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
+          <div className="text-center mb-8">
+            <div className="flex justify-center mb-2">
+              <Link href="/">
+                <Image src="/domuzz_logo.svg" alt="Domuzz" width={180} height={41} priority
+                  className="h-auto w-auto sm:w-[200px]" />
+              </Link>
+            </div>
+            <p className="text-lg sm:text-xl font-semibold mt-4 mb-1">{slugDisplay}</p>
+            <h1 className="text-xl sm:text-2xl font-bold mb-2">CMA Report</h1>
+          </div>
           <Card className="mb-8">
             <CardContent className="py-12 space-y-4">
               <Skeleton className="h-8 w-3/4 mx-auto" />
@@ -110,25 +128,40 @@ export default function CmaReportPermalinkPage() {
     );
   }
 
-  if (error) {
+  if (notFound) {
     return (
       <main className="min-h-screen bg-background">
-        <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
-          <Card className="mb-8 border-destructive/50 bg-destructive/5">
-            <CardContent className="py-4">
-              <p className="text-sm text-destructive">{error}</p>
-            </CardContent>
-          </Card>
+        <div className="max-w-4xl mx-auto px-4 py-12 text-center">
+          <div className="flex justify-center mb-4">
+            <Link href="/">
+              <Image src="/domuzz_logo.svg" alt="Domuzz" width={180} height={41} priority
+                className="h-auto w-auto sm:w-[200px]" />
+            </Link>
+          </div>
+          <h1 className="text-2xl font-bold mb-4">Report Not Found</h1>
+          <p className="text-muted-foreground mb-2">
+            No CMA report exists for this address yet.
+          </p>
+          <p className="text-muted-foreground mb-6">
+            {slugDisplay}
+          </p>
+          <Link href="/cma">
+            <Button size="lg">Generate a Free CMA Report</Button>
+          </Link>
         </div>
       </main>
     );
   }
 
-  if (!report) {
+  if (error || !report) {
     return (
       <main className="min-h-screen bg-background">
         <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
-          <p className="text-center text-muted-foreground">Report data unavailable.</p>
+          <Card className="mb-8 border-destructive/50 bg-destructive/5">
+            <CardContent className="py-4">
+              <p className="text-sm text-destructive">{error || "Report data unavailable."}</p>
+            </CardContent>
+          </Card>
         </div>
       </main>
     );
@@ -140,26 +173,16 @@ export default function CmaReportPermalinkPage() {
         <div className="text-center mb-8 sm:mb-10">
           <div className="flex justify-center mb-2">
             <Link href="/">
-              <Image
-                src="/domuzz_logo.svg"
-                alt="Domuzz"
-                width={180}
-                height={41}
-                priority
-                className="h-auto w-auto sm:w-[200px]"
-              />
+              <Image src="/domuzz_logo.svg" alt="Domuzz" width={180} height={41} priority
+                className="h-auto w-auto sm:w-[200px]" />
             </Link>
           </div>
           <p className="text-lg sm:text-xl font-semibold text-foreground mt-4 mb-1">
             {displayAddress}
           </p>
-          <h1 className="text-xl sm:text-2xl font-bold mb-1">
-            CMA Report
-          </h1>
+          <h1 className="text-xl sm:text-2xl font-bold mb-1">CMA Report</h1>
           {reportDate && (
-            <p className="text-sm text-muted-foreground mb-1">
-              Generated on {reportDate}
-            </p>
+            <p className="text-sm text-muted-foreground mb-1">Generated on {reportDate}</p>
           )}
           <p className="text-muted-foreground text-sm sm:text-base max-w-lg mx-auto">
             Get an instant Comparative Market Analysis for any US property.
@@ -186,29 +209,16 @@ export default function CmaReportPermalinkPage() {
 
         <div className="mt-8 flex justify-center items-center gap-3 flex-wrap">
           <Link href="/cma">
-            <Button variant="outline" size="lg">
-              ← Generate New Report
-            </Button>
+            <Button variant="outline" size="lg">← Generate New Report</Button>
           </Link>
           <Link href={regenerateUrl}>
-            <Button
-              size="lg"
-              disabled={!canRegenerate}
-              title={
-                canRegenerate
-                  ? "Regenerate this report with fresh data"
-                  : "You can regenerate this report 3 months after it was generated"
-              }
-            >
+            <Button size="lg" disabled={!canRegenerate}
+              title={canRegenerate ? "Regenerate with fresh data" : "Available 3 months after generation"}>
               🔄 Regenerate CMA Report
             </Button>
           </Link>
-          <a
-            href="https://buymeacoffee.com/domuzzcom"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-[#FFDD00] text-[#000000] hover:bg-[#FFDD00]/90 h-10 px-8"
-          >
+          <a href="https://buymeacoffee.com/domuzzcom" target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-[#FFDD00] text-[#000000] hover:bg-[#FFDD00]/90 h-10 px-8">
             ☕ Buy me a coffee
           </a>
         </div>
