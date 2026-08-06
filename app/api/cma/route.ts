@@ -215,7 +215,7 @@ export async function GET(request: NextRequest) {
           soldComparables: normalized.soldComparables,
           activeComparables: normalized.activeComparables,
         };
-        saveCmaReport(slug, fullAddress, reportPayload);
+        await saveCmaReport(slug, fullAddress, reportPayload);
 
         emit(controller, "progress", {
           stage: "estimate",
