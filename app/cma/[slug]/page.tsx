@@ -187,7 +187,7 @@ export default function CmaReportPermalinkPage() {
           <p className="text-lg sm:text-xl font-semibold text-foreground mt-4 mb-1">
             {displayAddress}
           </p>
-          <h1 className="text-xl sm:text-2xl font-bold mb-1">CMA Report</h1>
+          <h1 className="text-xl sm:text-2xl font-bold mb-1">Free CMA Report</h1>
           {reportDate && (
             <p className="text-sm text-muted-foreground mb-1">Generated on {reportDate}</p>
           )}
@@ -198,18 +198,26 @@ export default function CmaReportPermalinkPage() {
                   ← Generate New Report
                 </Button>
               </Link>
-              <Link href={regenerateUrl}>
-                <Button size="lg" className="rounded-full shadow-sm px-5" disabled={!canRegenerate}
-                  title={canRegenerate ? "Regenerate with fresh data" : `Available ${daysUntilRegenerate} day${daysUntilRegenerate === 1 ? "" : "s"} from now`}>
-                  🔄 Regenerate CMA Report
-                </Button>
-              </Link>
+              {canRegenerate ? (
+                <Link href={regenerateUrl}>
+                  <Button size="lg" className="rounded-full shadow-sm px-5" title="Regenerate with fresh data">
+                    🔄 Regenerate CMA Report
+                  </Button>
+                </Link>
+              ) : (
+                <span
+                  className="relative group inline-flex"
+                  title={`Regeneration available in ${daysUntilRegenerate} day${daysUntilRegenerate === 1 ? "" : "s"}`}
+                >
+                  <Button size="lg" className="rounded-full shadow-sm px-5" disabled>
+                    🔄 Regenerate CMA Report
+                  </Button>
+                  <span className="absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2.5 py-1 text-xs text-background opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none">
+                    Regeneration available in {daysUntilRegenerate} day{daysUntilRegenerate === 1 ? "" : "s"}
+                  </span>
+                </span>
+              )}
             </div>
-            {!canRegenerate && report?.createdAt && (
-              <p className="text-xs text-muted-foreground">
-                Regeneration available in {daysUntilRegenerate} day{daysUntilRegenerate === 1 ? "" : "s"} (30-day cooldown)
-              </p>
-            )}
           </div>
         </div>
 
