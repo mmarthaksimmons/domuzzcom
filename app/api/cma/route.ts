@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { checkRateLimit, getClientIP } from "@/lib/rate-limit";
+import { checkRateLimit, refundRateLimit, getClientIP } from "@/lib/rate-limit";
 import { scrapeCmaComps } from "@/lib/apify";
 import { normalizeApifyCmaResponse } from "@/lib/cma";
 import { generateAddressSlug } from "@/lib/utils";
@@ -10,6 +10,21 @@ export const runtime = "nodejs";
 
 /** Serve a cached report if it was updated within this many milliseconds. */
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+/**
+ * Rate limiting: N fresh reports per IP per window.
+ * Overridable via env, and disabled entirely outside production (or with
+ * DISABLE_RATE_LIMIT=true) so local testing is not blocked.
+ */
+const RATE_LIMIT_MAX =
+  Number.parseInt(process.env.CMA_RATE_LIMIT_MAX ?? "", 10) || 5;
+const RATE_LIMIT_WINDOW_MS =
+  (Number.parseInt(process.env.CMA_RATE_LIMIT_WINDOW_MINUTES ?? "", 10) || 60) *
+  60 *
+  1000;
+const RATE_LIMIT_DISABLED =
+  process.env.NODE_ENV !== "production" ||
+  process.env.DISABLE_RATE_LIMIT === "true";
 
 let cmaTableEnsured = false;
 
@@ -96,24 +111,6 @@ function emit(
 
 export async function GET(request: NextRequest) {
   const ip = getClientIP(request);
-  const rateLimitResult = checkRateLimit(ip, 5, 60 * 60 * 1000);
-
-  if (!rateLimitResult.allowed) {
-    return new Response(
-      JSON.stringify({
-        error: "Rate limit exceeded. Please try again later.",
-        retryAfter: Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000),
-      }),
-      {
-        status: 429,
-        headers: {
-          "Content-Type": "application/json",
-          "Retry-After": String(Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000)),
-          "X-RateLimit-Remaining": "0",
-        },
-      }
-    );
-  }
 
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address");
@@ -133,9 +130,51 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // Only count requests that can actually do work (after validation) and
+  // only keep the charge if a fresh report is produced — see `keepCharge`.
+  const rateLimitResult = RATE_LIMIT_DISABLED
+    ? { allowed: true, remaining: RATE_LIMIT_MAX, resetAt: Date.now() + RATE_LIMIT_WINDOW_MS }
+    : checkRateLimit(ip, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
+
+  if (!rateLimitResult.allowed) {
+    const retryAfter = Math.max(
+      1,
+      Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000)
+    );
+    const waitMinutes = Math.max(1, Math.ceil(retryAfter / 60));
+    return new Response(
+      JSON.stringify({
+        error: `Rate limit exceeded. Please try again in ${waitMinutes} minute${
+          waitMinutes === 1 ? "" : "s"
+        }.`,
+        retryAfter,
+      }),
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          "Retry-After": String(retryAfter),
+          "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+          "X-RateLimit-Remaining": "0",
+        },
+      }
+    );
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       let aborted = false;
+      // A fresh report consumes the request's allowance; cache hits, failures
+      // and client aborts are refunded. Refunds happen *before* the response
+      // is completed so an immediate retry cannot observe a stale count.
+      let keepCharge = false;
+      let released = false;
+
+      const releaseSlot = () => {
+        if (released || keepCharge || RATE_LIMIT_DISABLED) return;
+        released = true;
+        refundRateLimit(ip);
+      };
 
       const abortHandler = () => {
         aborted = true;
@@ -149,6 +188,8 @@ export async function GET(request: NextRequest) {
         // ── Cache check ──────────────────────────────────────────
         const cached = await getCachedReport(slug);
         if (cached && !aborted) {
+          // Cached reports cost nothing upstream — give the slot back.
+          releaseSlot();
           emit(controller, "progress", {
             stage: "detail",
             message: "Serving cached report...",
@@ -217,6 +258,9 @@ export async function GET(request: NextRequest) {
         };
         await saveCmaReport(slug, fullAddress, reportPayload);
 
+        // A fresh report was produced — this request now consumes a slot.
+        keepCharge = true;
+
         emit(controller, "progress", {
           stage: "estimate",
           message: "Estimate computed",
@@ -234,12 +278,17 @@ export async function GET(request: NextRequest) {
         controller.close();
       } catch (error: any) {
         console.error("CMA API error:", error);
+        // Failed scrapes should not burn the caller's allowance — refund
+        // before telling the client, so an immediate retry is allowed.
+        releaseSlot();
         emit(controller, "error", {
           stage: "search",
           message: error?.message ?? "An unexpected error occurred",
         });
         controller.close();
       } finally {
+        // Safety net for aborted requests / unexpected throws.
+        releaseSlot();
         request.signal.removeEventListener("abort", abortHandler);
       }
     },

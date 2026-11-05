@@ -53,6 +53,21 @@ export function checkRateLimit(
 }
 
 /**
+ * Give a request slot back. Used when a request never reached the expensive
+ * work (cache hit, aborted request) or failed upstream, so users do not get
+ * locked out because of failed attempts.
+ */
+export function refundRateLimit(key: string): void {
+  const entry = store.get(key);
+  if (!entry) return;
+  if (Date.now() > entry.resetAt) {
+    store.delete(key);
+    return;
+  }
+  entry.count = Math.max(0, entry.count - 1);
+}
+
+/**
  * Extract IP from request headers (works on Vercel)
  */
 export function getClientIP(request: Request): string {

@@ -28,6 +28,10 @@ export default function CmaPage() {
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Set when the API returns 429, so we can show the support card. */
+  const [rateLimited, setRateLimited] = useState<{
+    retryAfterSeconds: number | null;
+  } | null>(null);
   const [reportData, setReportData] = useState<CMAReportData | null>(null);
   const [reportSlug, setReportSlug] = useState<string | null>(null);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -53,6 +57,7 @@ export default function CmaPage() {
 
     setLoading(true);
     setError(null);
+    setRateLimited(null);
     setReportData(null);
     setReportSlug(null);
     setAiAnalysis(null);
@@ -69,6 +74,24 @@ export default function CmaPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        const isRateLimited =
+          res.status === 429 ||
+          (typeof data?.error === "string" &&
+            data.error.toLowerCase().includes("rate limit"));
+        if (isRateLimited) {
+          const headerRetry = Number.parseInt(
+            res.headers.get("Retry-After") ?? "",
+            10
+          );
+          const retryAfterSeconds =
+            typeof data?.retryAfter === "number"
+              ? data.retryAfter
+              : Number.isFinite(headerRetry)
+              ? headerRetry
+              : null;
+          setRateLimited({ retryAfterSeconds });
+          return;
+        }
         throw new Error(data.error || "Failed to generate CMA report");
       }
 
@@ -130,6 +153,12 @@ export default function CmaPage() {
     setRenovationData(data);
   }, []);
 
+  /** Minutes until the caller may generate another report (null = unknown). */
+  const rateLimitWaitMinutes =
+    rateLimited?.retryAfterSeconds != null
+      ? Math.max(1, Math.ceil(rateLimited.retryAfterSeconds / 60))
+      : null;
+
   return (
     <main className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
@@ -179,6 +208,37 @@ export default function CmaPage() {
             </form>
           </CardContent>
         </Card>
+
+        {rateLimited && (
+          <Card className="mb-8 border-amber-300 bg-amber-50">
+            <CardContent className="py-6">
+              <p className="text-sm font-semibold text-amber-900">
+                Rate limit exceeded — you&apos;ve used your free reports for now
+              </p>
+              <p className="text-sm text-amber-800 mt-1.5">
+                {rateLimitWaitMinutes !== null
+                  ? `You can generate another report in about ${rateLimitWaitMinutes} minute${
+                      rateLimitWaitMinutes === 1 ? "" : "s"
+                    }.`
+                  : "Please try again a little later."}
+              </p>
+              <p className="text-sm text-amber-800 mt-3 leading-relaxed">
+                Domuzz is free to use and every CMA report costs us real data
+                fees to generate. If this tool saved you time, please support us
+                by buying us a coffee — it helps us keep these reports free for
+                everyone.
+              </p>
+              <a
+                href="https://buymeacoffee.com/domuzzcom"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-[#FFDD00] text-[#000000] hover:bg-[#FFDD00]/90 h-10 px-6"
+              >
+                ☕ Buy Us A Coffee
+              </a>
+            </CardContent>
+          </Card>
+        )}
 
         {error && (
           <Card className="mb-8 border-destructive/50 bg-destructive/5">
