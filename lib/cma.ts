@@ -251,14 +251,81 @@ export function normalizeRentCastResponse(
 }
 
 /**
+ * The Zillow Apify actors (maxcopell~zillow-detail-scraper and
+ * maxcopell~zillow-zip-search) currently return the "listing" schema:
+ *   { listingAddress, listingPrice, listingSoldPrice, coordinates,
+ *     bedrooms, bathrooms, livingArea, lotArea, homeType, listingStatus, ... }
+ * Older runs returned the "detail"/"search" schema that the rest of this
+ * module reads (address, price, latLong, hdpData, unformattedPrice, ...).
+ *
+ * This adapter maps the new listing schema onto the legacy field names so
+ * both shapes flow through the same parsing/normalization code.
+ */
+function isListingSchema(raw: any): boolean {
+  return (
+    raw != null &&
+    (raw.listingAddress != null ||
+      raw.listingPrice != null ||
+      raw.listingSoldPrice != null ||
+      raw.coordinates != null)
+  );
+}
+
+function adaptListingRecord(raw: any): any {
+  if (!isListingSchema(raw)) return raw;
+
+  const address = raw.listingAddress ?? {};
+  const lot = raw.lotArea;
+  const soldPrice = raw.listingSoldPrice?.amount;
+  const listPrice = raw.listingPrice?.amount;
+
+  const streetAddress: string =
+    address.full ??
+    [address.street, address.unit].filter(Boolean).join(", ");
+
+  return {
+    ...raw,
+    // Legacy detail-schema fields
+    address: { ...address, streetAddress },
+    abbreviatedAddress: streetAddress,
+    price: soldPrice ?? listPrice ?? null,
+    homeStatus: raw.listingStatus ?? null,
+    bedrooms: raw.bedrooms ?? 0,
+    bathrooms: raw.bathrooms ?? 0,
+    livingArea: raw.livingArea ?? 0,
+    lotAreaValue: lot?.value ?? raw.lotAreaValue ?? null,
+    lotAreaUnits: lot?.unit ?? raw.lotAreaUnits ?? null,
+    yearBuilt: raw.yearBuilt ?? null,
+    homeType: raw.homeType ?? raw.propertyType ?? null,
+    latitude: raw.coordinates?.latitude ?? raw.latitude ?? null,
+    longitude: raw.coordinates?.longitude ?? raw.longitude ?? null,
+    daysOnZillow: raw.daysOnZillow ?? null,
+    datePosted: raw.datePosted ?? null,
+    dateSold: raw.dateSold ?? null,
+    zestimate: raw.zestimate ?? null,
+    imgSrc: raw.mainImage ?? raw.listingPhotos?.[0]?.url ?? null,
+  };
+}
+
+/**
+ * Normalize an address for dedupe comparisons. Zillow returns the same
+ * property with slightly different punctuation/spacing between the detail
+ * and zip-search datasets, so compare on alphanumerics only.
+ */
+function normalizeAddressKey(address: string): string {
+  return address.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/**
  * Extract a comparable from a raw Apify result, handling both the
  * detail-scraper schema and the search-scraper schema.
  */
 function parseRawComparable(
-  raw: any,
+  rawInput: any,
   subjectLat: number | null,
   subjectLng: number | null
 ): Comparable | null {
+  const raw = adaptListingRecord(rawInput);
   const isDetail = raw.address && typeof raw.address === "object";
 
   const compAddress: string = isDetail
@@ -380,7 +447,7 @@ export function normalizeApifyCmaResponse(
   }
 
   // ---- Subject property (result[0], from detail scraper) ----
-  const best = rawResults[0];
+  const best = adaptListingRecord(rawResults[0]);
   const isDetailSubject = best.address && typeof best.address === "object";
 
   const subjectLat: number | null = isDetailSubject
@@ -467,18 +534,17 @@ export function normalizeApifyCmaResponse(
   const soldComparables: Comparable[] = [];
   const activeComparables: Comparable[] = [];
   const seenAddresses = new Set<string>();
-  const subjectAddrKey = subjectAddress.toLowerCase().trim().replace(/[,.]/g, "");
+  const subjectAddrKey = normalizeAddressKey(subjectAddress);
 
   for (const raw of rawResults) {
     const comp = parseRawComparable(raw, subjectLat, subjectLng);
     if (!comp) continue;
-    const key = comp.address.toLowerCase().trim();
-    if (seenAddresses.has(key)) continue;
-    const compAddrSimple = key.replace(/[,.]/g, "");
+    const key = normalizeAddressKey(comp.address);
+    if (!key || seenAddresses.has(key)) continue;
     if (
-      compAddrSimple === subjectAddrKey ||
-      compAddrSimple.startsWith(subjectAddrKey) ||
-      subjectAddrKey.startsWith(compAddrSimple)
+      key === subjectAddrKey ||
+      key.startsWith(subjectAddrKey) ||
+      subjectAddrKey.startsWith(key)
     ) continue;
     seenAddresses.add(key);
     // Filter active listings to same property type as subject
@@ -506,51 +572,35 @@ export function normalizeApifyCmaResponse(
   }
 
   // ---- Process zip-search SOLD results ----
+  // Uses the same parser as active comps so both the current "listing"
+  // schema and the legacy search schema are handled consistently.
   if (soldResults && soldResults.length > 0) {
-    for (const raw of soldResults) {
-      const compAddress = raw.address ?? raw.addressStreet ?? "";
-      if (!compAddress) continue;
-      const price = raw.unformattedPrice;
-      if (!price || price <= 0) continue;
-      const key = compAddress.toLowerCase().trim();
-      if (seenAddresses.has(key)) continue;
-      seenAddresses.add(key);
-      const compAddrSimple = key.replace(/[,.]/g, "");
+    const subjectTypeLabel = formatHomeTypeAsPropertyType(subjectHomeType);
+    for (const rawSold of soldResults) {
+      const comp = parseRawComparable(rawSold, subjectLat, subjectLng);
+      if (!comp) continue;
+
+      const key = normalizeAddressKey(comp.address);
+      if (!key || key === "—" || seenAddresses.has(key)) continue;
+
       if (
-        compAddrSimple === subjectAddrKey ||
-        compAddrSimple.startsWith(subjectAddrKey) ||
-        subjectAddrKey.startsWith(compAddrSimple)
+        key === subjectAddrKey ||
+        key.startsWith(subjectAddrKey) ||
+        subjectAddrKey.startsWith(key)
       ) continue;
-      const compLat = raw.latLong?.latitude ?? null;
-      const compLng = raw.latLong?.longitude ?? null;
-      const dist = computeDistance(subjectLat, subjectLng, compLat, compLng);
-      const compHdpHomeType = raw.hdpData?.homeInfo?.homeType;
-      const compRawType = compHdpHomeType ?? raw.homeType ?? raw.propertyType;
+
       // Filter sold comps: must match subject property type
-      if (subjectHomeType && compRawType) {
-        const compLabel = formatHomeTypeAsPropertyType(compRawType);
-        const subjectLabel = formatHomeTypeAsPropertyType(subjectHomeType);
-        if (compLabel !== subjectLabel) continue;
-      }
-      soldComparables.push({
-        address: compAddress,
-        status: "SOLD",
-        price: price,
-        beds: raw.beds ?? 0,
-        baths: raw.baths ?? 0,
-        sqft: raw.area ?? 0,
-        lotSize: null,
-        yearBuilt: null,
-        propertyType: formatHomeTypeAsPropertyType(compHdpHomeType ?? raw.homeType ?? raw.propertyType),
-        distance: dist,
-        daysOnMarket: raw.hdpData?.homeInfo?.daysOnZillow ?? null,
-        correlation: 0.85,
-        isSold: true,
-        latitude: compLat,
-        longitude: compLng,
-        listedDate: null,
-        soldDate: raw.hdpData?.homeInfo?.dateSold ?? null,
-      });
+      if (
+        subjectTypeLabel &&
+        comp.propertyType &&
+        comp.propertyType !== subjectTypeLabel
+      ) continue;
+
+      seenAddresses.add(key);
+      // Everything from the sold search is a closed transaction.
+      comp.isSold = true;
+      comp.status = "SOLD";
+      soldComparables.push(comp);
     }
   }
 
@@ -650,12 +700,21 @@ export function normalizeApifyCmaResponse(
     tightCount = tightComps.length;
   } else {
     // No tight comps: fall back to top-by-correlation from full set
-    console.warn("CMA: Low-confidence estimate — no tight comps found (correlation >= 0.70 within 2.0 mi)");
+    console.warn(
+      `CMA: Low-confidence estimate — no tight comps found (correlation >= ${TIGHT_MIN_CORRELATION.toFixed(2)} within ${TIGHT_MAX_DISTANCE_MILES} mi). ` +
+        `scored=${allCompsScored.length} (sold=${scoredSold.length}, active=${scoredActive.length})`
+    );
     selectedComps = allCompsScored
       .filter(usable)
       .sort((a, b) => b.correlation - a.correlation)
       .slice(0, ESTIMATE_COMP_LIMIT);
     tightCount = 0;
+  }
+
+  if (selectedComps.length === 0) {
+    throw new Error(
+      "No comparable properties with a usable price and square footage were found near this address"
+    );
   }
 
   // ---- Outlier filtering on selected tier (BEFORE cap) ----

@@ -63,7 +63,11 @@ export async function scrapeCmaComps(address: string) {
 
   const prop = detailData[0];
   const zipCode: string | undefined =
-    prop.zipcode ?? prop.address?.zipcode ?? prop.addressZipCode ?? undefined;
+    prop.listingAddress?.zipCode ??
+    prop.zipcode ??
+    prop.address?.zipcode ??
+    prop.addressZipCode ??
+    undefined;
 
   // Phase 2a: Active for-sale comps via zip-search
   if (zipCode) {
