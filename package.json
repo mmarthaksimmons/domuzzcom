@@ -1,7 +1,32 @@
 {
-  "name": "nextjs",
+  "name": "domuzz",
   "version": "0.1.0",
+  "description": "Free, no-signup real-estate tools: property comparison, CMA reports and an FSBO savings calculator. Next.js 16 + Prisma + Neon.",
+  "license": "MIT",
+  "author": "Marthak Simmons",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmarthaksimmons/domuzzcom.git"
+  },
+  "homepage": "https://domuzz.com",
+  "bugs": {
+    "url": "https://github.com/mmarthaksimmons/domuzzcom/issues"
+  },
+  "keywords": [
+    "real-estate",
+    "cma",
+    "comparative-market-analysis",
+    "nextjs",
+    "react",
+    "prisma",
+    "neon",
+    "tailwindcss",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",

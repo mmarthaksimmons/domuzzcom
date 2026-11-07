@@ -1,0 +1,60 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Please do **not** include secrets (API keys,
+        database URLs, tokens) in this issue. For security problems, follow
+        [SECURITY.md](https://github.com/mmarthaksimmons/domuzzcom/blob/main/SECURITY.md) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to /cma
+        2. Enter address "..."
+        3. Click "Run CMA"
+        4. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area is affected?
+      multiple: true
+      options:
+        - Property comparison (/compare)
+        - CMA report (/cma)
+        - FSBO calculator (/fsbo)
+        - PDF export / print view
+        - API routes
+        - Local setup / build
+        - Other
+    validations:
+      required: false
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: "20.11.0"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Server console output, browser console, or stack trace.
+      render: shell
