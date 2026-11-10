@@ -13,6 +13,7 @@ import CmaAiAnalysis from "@/components/CmaAiAnalysis";
 import RenovationAdjustments from "@/components/RenovationAdjustments";
 import EmailCaptureModal from "@/components/EmailCaptureModal";
 import ProgressPanel, { type ProgressEvent } from "@/components/ProgressPanel";
+import { siteHost } from "@/lib/site";
 
 const CmaMap = dynamic(() => import("@/components/CmaMap"), { ssr: false });
 const CmaCharts = dynamic(() => import("@/components/CmaCharts"), { ssr: false });
@@ -278,7 +279,7 @@ export default function CmaPage() {
                     href={`/cma/${reportSlug}`}
                     className="text-primary underline underline-offset-2 hover:text-primary/80"
                   >
-                    domuzz.com/cma/{reportSlug}
+                    {siteHost}/cma/{reportSlug}
                   </Link>
                 </p>
               </div>

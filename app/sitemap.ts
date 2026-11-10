@@ -1,7 +1,8 @@
 import { MetadataRoute } from "next";
+import { siteUrl } from "@/lib/site";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = "https://www.domuzz.com";
+  const baseUrl = siteUrl;
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: baseUrl, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },

@@ -49,11 +49,13 @@ gracefully when its key is missing.
 | --- | --- | --- |
 | `DATABASE_URL` | ✅ | Postgres connection string (Neon works well; the adapter is serverless-only). |
 | `APIFY_TOKEN` | ✅ | Runs the Zillow scraping actors for listing data. |
+| `NEXT_PUBLIC_SITE_URL` | – | Your public origin, used for sitemap, canonical/OG URLs and email links. Defaults to `https://www.domuzz.com`. |
+| `NEXT_PUBLIC_SITE_NAME` | – | Product name in titles/OG metadata. Defaults to `Domuzz`. |
 | `GEMINI_API` | – | AI summaries and CMA analysis. Without it, deterministic output is used. |
 | `GOOGLE_MAPS_API_KEY` | – | Street View photos (Street View Static API). Falls back to listing photos. |
 | `RESEND_API_KEY` | – | Report emails and lead sync. |
 | `RESEND_FROM_EMAIL` | – | "From" address for those emails. |
-| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | – | Your own GA4 property. |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | – | Your own GA4 property. **No default** — leave unset and no analytics tag loads. |
 | `CMA_RATE_LIMIT_MAX` / `CMA_RATE_LIMIT_WINDOW_MINUTES` | – | Per-IP CMA limit (default 5 / 60 min). |
 | `DISABLE_RATE_LIMIT` | – | Set to `true` to turn rate limiting off. |
 

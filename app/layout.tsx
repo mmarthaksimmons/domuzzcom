@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
 import { GoogleAnalytics } from "@/components/GoogleAnalytics";
+import { siteDescription, siteName, siteUrl } from "@/lib/site";
 import "./globals.css";
 
 const interSans = Inter({
@@ -21,9 +22,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Domuzz House Compare",
-  description:
-    "Compare up to 3 properties side-by-side with AI-powered insights. Free, no-auth, instant.",
+  metadataBase: new URL(siteUrl),
+  title: `${siteName} House Compare`,
+  description: siteDescription,
 };
 
 export default function RootLayout({

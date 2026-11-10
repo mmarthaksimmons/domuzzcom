@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { siteName, siteUrl } from "@/lib/site";
 
 interface LayoutParams {
   slug: string;
@@ -15,8 +16,8 @@ export async function generateMetadata({
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
 
-  const title = `${readable} — Free CMA Report | Domuzz`;
-  const url = `https://www.domuzz.com/cma/${slug}`;
+  const title = `${readable} — Free CMA Report | ${siteName}`;
+  const url = `${siteUrl}/cma/${slug}`;
 
   return {
     title,
@@ -26,7 +27,7 @@ export async function generateMetadata({
       title,
       description: `Free Comparative Market Analysis for ${readable}. See estimated value, sold comparables, and market trends.`,
       url,
-      siteName: "Domuzz",
+      siteName,
       type: "website",
     },
     twitter: {

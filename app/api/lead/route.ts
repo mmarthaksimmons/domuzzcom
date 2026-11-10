@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
+import { siteHost, siteUrl } from "@/lib/site";
 
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -52,7 +53,7 @@ async function sendWelcomeEmail(email: string, firstName: string | null) {
             We're building free tools to help home buyers and sellers make smarter decisions — without the pressure of an agent.
           </p>
           <p style="color: #525252; line-height: 1.6;">
-            👉 <a href="https://domuzz.com" style="color: #2563eb;">Visit domuzz.com</a> for more free tools including side-by-side house comparisons.
+            👉 <a href="${siteUrl}" style="color: #2563eb;">Visit ${siteHost}</a> for more free tools including side-by-side house comparisons.
           </p>
           <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
           <p style="color: #525252; line-height: 1.6;">

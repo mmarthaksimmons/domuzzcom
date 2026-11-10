@@ -1,5 +1,13 @@
 # Pixel‑Perfect PDF Generation on Amazon Lightsail (Vercel + Lightsail Hybrid)
 
+> **Reference architecture, not a requirement.** This document describes one
+> optional way to render pixel-perfect PDFs for a self-hosted deployment,
+> written against the Domuzz production setup. Nothing here is wired into the
+> app by default — the shipped PDF path uses `@react-pdf/renderer`
+> (`lib/CmaPdfDocument.tsx`). Adapt the hostnames, instance sizes and costs to
+> your own infrastructure. **No real credentials appear in this file**; every
+> secret is read from the environment (`PDF_SERVICE_TOKEN`).
+
 This guide covers how to produce **pixel‑perfect CMA reports as PDFs** from the Domuzz Next.js app, with:
 
 - **domuzz.com** staying on **Vercel** (hosting the Next.js app, APIs, and database)
